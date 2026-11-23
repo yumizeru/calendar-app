@@ -105,7 +105,12 @@ const activeHabits = () => data.habits.filter(h => !h.deleted);
 const activeCategories = () => data.categories.filter(c => !c.deleted);
 const NO_CAT_COLOR = '#8b93a7';
 const catOf = ev => data.categories.find(c => c.id === ev.categoryId && !c.deleted) || null;
-const colorOf = ev => (catOf(ev) || {}).color || NO_CAT_COLOR;
+// 共有カレンダー（shared.js）は後から読み込まれるので、使う時点で有無を確かめる
+const hasShared = () => typeof Shared !== 'undefined';
+const sharedCal = ev => (ev.calendarId && hasShared() ? Shared.calendarById(ev.calendarId) : null);
+const colorOf = ev => { const sc = sharedCal(ev); return sc ? sc.color : ((catOf(ev) || {}).color || NO_CAT_COLOR); };
+// 自分の予定 ＋ 参加している共有カレンダーの予定
+const allEvents = () => (hasShared() ? data.events.concat(Shared.events()) : data.events);
 
 /* ========== 日付ユーティリティ ========== */
 const { pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD } = Core;
@@ -161,13 +166,15 @@ function eventRow(o) {
   const ev = o.ev;
   const bell = ev.remind != null && ev.remind !== '' ? ' <span class="bell" title="リマインダー">🔔</span>' : '';
   const rep = ev.repeat ? ' <span class="rep" title="繰り返し">🔁</span>' : '';
+  const sc = sharedCal(ev);
+  const shared = sc ? ` <span class="shared-tag">👥 ${esc(sc.name)}</span>` : '';
   return `<li data-id="${esc(ev.id)}" data-occ="${esc(o.start)}" style="--c:${esc(colorOf(ev))}">
     <span class="cbar"></span>
     <span class="time">${esc(Core.timeLabel(o))}</span>
-    <span class="title">${esc(ev.title)}${rep}${bell}${ev.memo ? `<span class="memo">${esc(ev.memo)}</span>` : ''}</span>
+    <span class="title">${esc(ev.title)}${rep}${bell}${shared}${ev.memo ? `<span class="memo">${esc(ev.memo)}</span>` : ''}</span>
   </li>`;
 }
-const dayOccurrences = day => Core.onDay(data.events, day);
+const dayOccurrences = day => Core.onDay(allEvents(), day);
 
 /* ========== 描画：月 ========== */
 function renderMonth() {
@@ -178,7 +185,7 @@ function renderMonth() {
   const start = addDays(first, -first.getDay());
   const from = ymd(start), to = ymd(addDays(start, 41));
   const byDay = {};
-  for (const o of Core.expand(data.events, from, to)) {
+  for (const o of Core.expand(allEvents(), from, to)) {
     for (let s = o.start < from ? from : o.start; s <= o.end && s <= to; s = addDaysStr(s, 1)) {
       (byDay[s] = byDay[s] || []).push(o);
     }
@@ -243,7 +250,7 @@ function renderWeek() {
 function renderList() {
   $('#monthTitle').textContent = 'これからの予定';
   const from = todayStr(), to = addDaysStr(from, 59);
-  const occ = Core.expand(data.events, from, to);
+  const occ = Core.expand(allEvents(), from, to);
   const byDay = {};
   for (const o of occ) {
     const s = o.start < from ? from : o.start; // 複数日の予定は始まりの日（または今日）に1回だけ出す
@@ -477,9 +484,31 @@ function syncDialogUi() {
   $('#evWeekdays').hidden = !(r === 'weekly' || r === 'biweekly');
 }
 
+// 予定がどこにあるか：'' = 自分の予定、それ以外 = 共有カレンダーの id
+const findEvent = id => data.events.find(x => x.id === id && !x.deleted) || (hasShared() ? Shared.find(id) : null);
+
+function fillCalendarSelect(value) {
+  const cals = hasShared() && Cloud.session ? Shared.calendars() : [];
+  $('#evCalRow').hidden = !cals.length;
+  $('#evCal').innerHTML = '<option value="">自分だけ</option>' +
+    cals.map(c => `<option value="${esc(c.id)}">👥 ${esc(c.name)}</option>`).join('');
+  $('#evCal').value = value && cals.some(c => c.id === value) ? value : '';
+  syncCalUi();
+}
+// 共有カレンダーの予定は、カレンダーの色で表示するのでカテゴリは使わない
+function syncCalUi() { $('#evCategoryRow').hidden = !!$('#evCal').value; }
+
 function openEvent(id, occStart, newDate) {
-  const ev = id ? data.events.find(x => x.id === id && !x.deleted) : null;
-  editing = ev ? { id: ev.id, occStart: occStart || ev.date, recurring: !!ev.repeat } : null;
+  const ev = id ? findEvent(id) : null;
+  editing = ev ? { id: ev.id, occStart: occStart || ev.date, recurring: !!ev.repeat, store: ev.calendarId || '' } : null;
+  fillCalendarSelect(ev ? (ev.calendarId || '') : '');
+  const info = $('#evSharedInfo');
+  info.hidden = !(ev && ev.calendarId);
+  if (ev && ev.calendarId) {
+    const who = Shared.memberName(ev.calendarId, ev.updatedBy);
+    const when = ev.sharedUpdatedAt ? new Date(ev.sharedUpdatedAt) : null;
+    info.textContent = `👥 共有の予定${who ? ` ・ 最後に変更：${who}` : ''}${when ? `（${when.getMonth() + 1}/${when.getDate()} ${pad(when.getHours())}:${pad(when.getMinutes())}）` : ''}`;
+  }
   const start = ev ? (occStart || ev.date) : (newDate || selected);
   const dur = ev ? Core.duration(ev) : 0;
   $('#eventDialogTitle').textContent = ev ? '予定を編集' : '予定を追加';
@@ -543,11 +572,17 @@ $('#eventForm').addEventListener('submit', async ev => {
   if (err) { toast(err); return; }
   const now = Date.now();
   const wasEditing = !!editing;
+  const target = $('#evCal').value || '';
+  if (target) f.categoryId = '';
+
+  // 変更をためておき、最後に「自分の予定」と「共有カレンダー」へまとめて反映する
+  const tx = newTx();
 
   if (!editing) {
-    data.events.push({ id: uid(), ...f, exdates: [], updatedAt: now });
+    tx.put({ id: uid(), ...f, exdates: [], updatedAt: now }, target);
   } else {
-    const cur = data.events.find(x => x.id === editing.id);
+    const src = editing.store;
+    const cur = { ...findEvent(editing.id) };
     let scope = 'all';
     if (editing.recurring) {
       scope = await askScope('繰り返しの予定を変更します');
@@ -555,56 +590,104 @@ $('#eventForm').addEventListener('submit', async ev => {
     }
     if (scope === 'one') {
       // この回だけ：元の繰り返しからこの日を外し、別の予定として切り離す
-      cur.exdates = [...new Set([...(cur.exdates || []), editing.occStart])];
-      cur.updatedAt = now;
-      data.events.push({ id: uid(), ...f, repeat: null, exdates: [], parentId: cur.id, origDate: editing.occStart, updatedAt: now });
-    } else if (editing.recurring && f.repeat) {
-      // すべて：開いた回でずらした日数ぶん、繰り返し全体をずらす
-      const shift = diffDays(editing.occStart, f.date);
-      const dur = f.endDate ? diffDays(f.date, f.endDate) : 0;
-      const newStart = addDaysStr(cur.date, shift);
-      Object.assign(cur, f, {
-        date: newStart,
-        endDate: dur ? addDaysStr(newStart, dur) : '',
-        exdates: (cur.exdates || []).map(x => addDaysStr(x, shift)),
-        updatedAt: now,
-      });
-      if (f.repeat.until && f.repeat.until < newStart) delete cur.repeat.until;
+      tx.put({ ...cur, exdates: [...new Set([...(cur.exdates || []), editing.occStart])], updatedAt: now }, src);
+      tx.put({ id: uid(), ...f, repeat: null, exdates: [], parentId: cur.id, origDate: editing.occStart, updatedAt: now }, target);
     } else {
-      Object.assign(cur, f, { exdates: f.repeat ? (cur.exdates || []) : [], updatedAt: now });
+      let next;
+      if (editing.recurring && f.repeat) {
+        // すべて：開いた回でずらした日数ぶん、繰り返し全体をずらす
+        const shift = diffDays(editing.occStart, f.date);
+        const dur = f.endDate ? diffDays(f.date, f.endDate) : 0;
+        const newStart = addDaysStr(cur.date, shift);
+        next = { ...cur, ...f, date: newStart, endDate: dur ? addDaysStr(newStart, dur) : '',
+          exdates: (cur.exdates || []).map(x => addDaysStr(x, shift)), updatedAt: now };
+        if (f.repeat.until && f.repeat.until < newStart) next.repeat = { ...f.repeat, until: undefined };
+      } else {
+        next = { ...cur, ...f, exdates: f.repeat ? (cur.exdates || []) : [], updatedAt: now };
+      }
+      if (src !== target) tx.drop(cur, src); // カレンダーを移した
+      tx.put(next, target);
     }
   }
-  save();
+  if (!(await tx.commit())) return;
   selected = f.date;
   const d = parseYmd(f.date);
   viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
   dlg.close();
   render();
-  toast(wasEditing ? '予定を更新しました' : '予定を追加しました');
+  toast(wasEditing ? '予定を更新しました' : (target ? '共有カレンダーに追加しました' : '予定を追加しました'));
 });
 
 $('#evDelete').addEventListener('click', async () => {
   if (!editing) return;
-  const cur = data.events.find(x => x.id === editing.id);
+  const src = editing.store;
+  const cur = { ...findEvent(editing.id) };
   const now = Date.now();
+  const tx = newTx();
   if (editing.recurring) {
     const scope = await askScope('繰り返しの予定を削除します');
     if (scope === 'cancel') return;
     if (scope === 'one') {
-      cur.exdates = [...new Set([...(cur.exdates || []), editing.occStart])];
-      cur.updatedAt = now;
+      tx.put({ ...cur, exdates: [...new Set([...(cur.exdates || []), editing.occStart])], updatedAt: now }, src);
     } else {
-      data.events = data.events.map(x => (x.id === cur.id || x.parentId === cur.id) ? { id: x.id, deleted: true, updatedAt: now } : x);
+      // 繰り返し本体と、そこから切り離した回もまとめて消す
+      tx.drop(cur, src);
+      for (const x of allEvents()) if (x.parentId === cur.id && !x.deleted) tx.drop(x, x.calendarId || '');
     }
   } else {
-    if (!confirm('この予定を削除しますか？')) return;
-    data.events = data.events.map(x => x.id === cur.id ? { id: x.id, deleted: true, updatedAt: now } : x);
+    if (!confirm(src ? 'この予定を削除しますか？（共有している全員から消えます）' : 'この予定を削除しますか？')) return;
+    tx.drop(cur, src);
   }
-  save();
+  if (!(await tx.commit())) return;
   dlg.close();
   render();
   toast('予定を削除しました');
 });
+
+// 自分の予定（data.events）と共有カレンダーへの変更をまとめて行う
+function newTx() {
+  let personal = false;
+  const changed = [], removed = [];
+  return {
+    put(ev, store) {
+      if (!store) {
+        const { calendarId, updatedBy, sharedUpdatedAt, ...clean } = ev;
+        const i = data.events.findIndex(x => x.id === clean.id);
+        if (i >= 0) data.events[i] = clean; else data.events.push(clean);
+        personal = true;
+      } else {
+        changed.push({ ...ev, calendarId: store });
+      }
+    },
+    drop(ev, store) {
+      if (!store) {
+        data.events = data.events.map(x => x.id === ev.id ? { id: x.id, deleted: true, updatedAt: Date.now() } : x);
+        personal = true;
+      } else {
+        removed.push(ev.id);
+      }
+    },
+    async commit() {
+      if (changed.length || removed.length) {
+        if (!Cloud.session) { toast('共有カレンダーを使うにはログインが必要です'); return false; }
+        try {
+          // 同じ予定を消してから入れ直す場合（共有→共有の移動）に備えて、入れるものは消す対象から外す
+          const keep = new Set(changed.map(x => x.id));
+          await Shared.commit(changed, removed.filter(id => !keep.has(id)));
+        } catch (e) {
+          console.warn(e);
+          toast('共有カレンダーに保存できませんでした（ネット接続を確認してください）');
+          if (personal) data = load(); // 自分の予定側の途中の変更も取り消す
+          Shared.refresh();
+          return false;
+        }
+      }
+      if (personal) save();
+      return true;
+    },
+  };
+}
+$('#evCal').addEventListener('change', syncCalUi);
 $('#evCancel').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 dlg.addEventListener('close', () => { editing = null; });

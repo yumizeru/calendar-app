@@ -75,7 +75,8 @@ const Cloud = (() => {
   }
   async function signOut() {
     // この端末への通知も止める（ログアウト後に他人の予定が届かないように）
-    if (window.Push) await window.Push.disable().catch(() => {});
+    // Push は push.js の const なので window からは見えない。typeof で確かめる
+    if (typeof Push !== 'undefined') await Push.disable().catch(() => {});
     await client.auth.signOut().catch(() => {});
     session = null;
     try { localStorage.removeItem(LAST_SYNC_KEY); } catch {}
@@ -100,8 +101,9 @@ const Cloud = (() => {
     const from = Core.ymd(new Date(now - 86400000));
     const to = Core.ymd(new Date(limit + 86400000));
     const items = [];
-    // 繰り返しの予定も1回ずつに展開してから通知時刻を計算する
-    for (const o of Core.expand(d.events, from, to)) {
+    // 繰り返しの予定も1回ずつに展開してから通知時刻を計算する（共有カレンダーの予定も含める）
+    const allEv = typeof Shared !== 'undefined' ? d.events.concat(Shared.events()) : d.events;
+    for (const o of Core.expand(allEv, from, to)) {
       const e = o.ev;
       if (e.remind == null || e.remind === '' || o.start < from) continue;
       const [y, m, day] = o.start.split('-').map(Number);
@@ -167,6 +169,7 @@ const Cloud = (() => {
       const now = Date.now();
       try { localStorage.setItem(LAST_SYNC_KEY, String(now)); } catch {}
       setStatus(fmtTime(now));
+      if (typeof Shared !== 'undefined') Shared.refresh();
     } catch (err) {
       console.warn('sync failed', err);
       if (err && /JWT|session|401|403/i.test(String(err.message || err.code || ''))) {

@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="11">
+  <meta name="app-version" content="12">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -104,6 +104,27 @@
           </div>
         </div>
       </div>
+      <div class="card" id="sharedCard" hidden>
+        <h3>共有カレンダー</h3>
+        <p class="muted">家族や友人と予定を共有できます。共有カレンダーに入れた予定だけが相手に見え、自分の予定・習慣・ToDoは見えません。</p>
+        <label class="inline-field">あなたの表示名<input id="shName" type="text" maxlength="20" placeholder="例：ママ"></label>
+        <ul class="shared-list" id="sharedList"></ul>
+        <details class="sh-details">
+          <summary>新しく作る</summary>
+          <form id="shCreate" class="habit-form">
+            <input id="shCalName" type="text" maxlength="30" placeholder="例：家族" required>
+            <input id="shCalColor" type="color" value="#ec4899" aria-label="色">
+            <button class="btn primary" type="submit">作成</button>
+          </form>
+        </details>
+        <details class="sh-details">
+          <summary>招待コードで参加</summary>
+          <form id="shJoin" class="habit-form">
+            <input id="shCode" type="text" maxlength="14" placeholder="10文字のコード" autocapitalize="characters" autocomplete="off" required>
+            <button class="btn primary" type="submit">参加</button>
+          </form>
+        </details>
+      </div>
       <div class="card">
         <h3>カテゴリ</h3>
         <p class="muted">予定の色分けに使います。名前と色を変えたり、増やしたりできます。</p>
@@ -169,6 +190,7 @@
     <form method="dialog" id="eventForm">
       <h3 id="eventDialogTitle">予定</h3>
       <label>タイトル<input id="evTitle" type="text" maxlength="60" required></label>
+      <label id="evCalRow" hidden>カレンダー<select id="evCal"></select></label>
       <label class="check-row"><input id="evAllDay" type="checkbox"> 終日</label>
       <div class="row">
         <label>開始日<input id="evDate" type="date" required></label>
@@ -179,7 +201,7 @@
         <label class="time-field">終了<input id="evEndTime" type="time"></label>
       </div>
       <div class="row">
-        <label>カテゴリ<select id="evCategory"></select></label>
+        <label id="evCategoryRow">カテゴリ<select id="evCategory"></select></label>
         <label>繰り返し
           <select id="evRepeat">
             <option value="">しない</option>
@@ -210,6 +232,7 @@
         <small class="hint">時刻なし（終日）の予定は当日9:00が基準です。通知には「設定」でのログインと通知オンが必要です。</small>
       </label>
       <label>メモ<textarea id="evMemo" rows="3" maxlength="500"></textarea></label>
+      <p class="muted small" id="evSharedInfo" hidden></p>
       <div class="row end">
         <button class="btn danger" id="evDelete" type="button">削除</button>
         <span class="spacer"></span>
@@ -300,6 +323,7 @@
   <script src="core.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
+  <script src="shared.js"></script>
   <script src="push.js"></script>
   <script src="widget.js"></script>
 </body>

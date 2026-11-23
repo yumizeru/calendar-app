@@ -193,9 +193,12 @@ function habitItems(habits, marks, today, on, legacyStreak) {
 
 function view(data) {
   const today = ymd(new Date());
-  const events = (data.events || []).filter(e => !e.deleted && e.date && e.title);
+  // 自分の予定 ＋ 共有カレンダーの予定
+  const events = (data.events || []).concat(data.shared_events || []).filter(e => !e.deleted && e.date && e.title);
   const cats = {};
   for (const c of data.categories || []) if (!c.deleted) cats[c.id] = c.color;
+  const calColors = {};
+  for (const c of data.shared_calendars || []) calColors[c.id] = c.color;
   const habits = (data.habits || []).filter(h => !h.deleted && h.name);
   const marks = data.marks || {};
   const on = (d, id) => !!(marks[`${d}|${id}`] || {}).on;
@@ -209,7 +212,7 @@ function view(data) {
   const toItem = (o, day) => ({
     date: day, title: o.ev.title, time: timeOf(o, day),
     sort: (o.ev.time && day === o.start ? o.ev.time : '00:00') + o.ev.title,
-    color: cats[o.ev.categoryId] || null,
+    color: (o.ev.calendarId && calColors[o.ev.calendarId]) || cats[o.ev.categoryId] || null,
   });
   const weekEnd = ymd(addDays(new Date(), 7));
   const tomorrow = ymd(addDays(new Date(), 1));

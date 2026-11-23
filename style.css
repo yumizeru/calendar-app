@@ -318,6 +318,20 @@ dialog label.color-field input { height: 42px; padding: 2px; }
   border-radius: 999px; background: var(--danger); color: #fff; font-size: .62rem; font-weight: 700; line-height: 16px;
 }
 
+/* 共有カレンダー */
+.shared-tag { font-size: .68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+.inline-field { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); margin-bottom: 8px; }
+.inline-field input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 1rem; }
+.shared-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.shared-list > li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.sh-top { display: flex; align-items: center; gap: 4px; }
+.sh-top .name { font-weight: 700; }
+.sh-top .tags { display: block; font-size: .72rem; font-weight: 400; color: var(--muted); }
+.shared-list .code { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; color: var(--text); user-select: all; }
+.sh-details { margin-top: 8px; }
+.sh-details summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--accent); padding: 4px 0; }
+.sh-details form { margin-top: 6px; }
+
 /* カテゴリ（設定） */
 .cat-list { list-style: none; margin: 0 0 10px; padding: 0; }
 .cat-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
