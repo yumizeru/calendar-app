@@ -200,6 +200,7 @@ function renderMonth() {
   $('#grid').hidden = style === 'column';
   $('#monthCol').hidden = style !== 'column';
   if (style === 'column') { renderMonthColumn(y, m, byDay, todoCount, today, habits); return; }
+  const big = Number(prefs.font) > 1; // 「大きい」「とても大きい」
 
   let html = '';
   for (let i = 0; i < 42; i++) {
@@ -215,17 +216,27 @@ function renderMonth() {
     if (s === today) cls.push('today');
     if (s === selected) cls.push('selected');
     const evs = (byDay[s] || []).slice().sort((a, b) => ((a.ev.time || '') + a.ev.title).localeCompare((b.ev.time || '') + b.ev.title));
-    // 「予定名」スタイルは色付きの帯にタイトルを出す。「シンプル」は色の点だけ
-    const evDots = style === 'titles'
-      ? evs.slice(0, 3).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(o.ev.title)}</span>`).join('') +
-        (evs.length > 3 ? `<span class="more">+${evs.length - 3}</span>` : '') +
-        (todoCount[s] ? `<span class="tchip">☐${todoCount[s]}</span>` : '')
-      : evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
-        (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
-        (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
-    const hDots = habits.filter(h => isDoneOn(h, s))
-      .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
-    const hl = hol ? `<span class="hol-name">${esc(hol)}</span>` : '';
+    let evDots, hDots, hl;
+    if (big && style !== 'titles') {
+      // 大きい文字：小さな点や祝日名は読めないので出さず、件数だけを大きめに出す（詳しくは下の日パネルで）
+      evDots = (evs.length ? `<span class="ecount" style="--c:${esc(colorOf(evs[0].ev))}">${evs.length}件</span>` : '') +
+        (todoCount[s] ? `<span class="tcount">☐${todoCount[s]}</span>` : '');
+      hDots = '';
+      hl = '';
+    } else {
+      // 「予定名」スタイルは色付きの帯にタイトルを出す。「シンプル」は色の点だけ
+      const maxChips = big ? 2 : 3;
+      evDots = style === 'titles'
+        ? evs.slice(0, maxChips).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(o.ev.title)}</span>`).join('') +
+          (evs.length > maxChips ? `<span class="more">+${evs.length - maxChips}</span>` : '') +
+          (todoCount[s] ? `<span class="tchip">☐${todoCount[s]}</span>` : '')
+        : evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
+          (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
+          (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
+      hDots = big ? '' : habits.filter(h => isDoneOn(h, s))
+        .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
+      hl = hol && !big ? `<span class="hol-name">${esc(hol)}</span>` : '';
+    }
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
       <span class="num">${d.getDate()}</span>${hl}<span class="edots">${evDots}</span><span class="dots">${hDots}</span></button>`;
   }
@@ -287,7 +298,11 @@ function applyPrefs() {
   document.querySelectorAll('#prefMonthStyle .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.monthStyle));
   document.querySelectorAll('#prefFont .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === String(prefs.font)));
   $('#prefContrast').checked = !!prefs.contrast;
-  $('#prefMonthHint').textContent = MONTH_HINTS[prefs.monthStyle] || '';
+  $('#prefMonthHint').textContent = prefs.monthStyle === 'dots' && Number(prefs.font) > 1
+    ? '日付と予定の件数を大きく表示します（予定の中身は日付をタップすると下に出ます）。'
+    : (MONTH_HINTS[prefs.monthStyle] || '');
+  // 大きい文字を選んでいて、まだ「1列」でなければ、1列をすすめる説明を出す
+  $('#prefFontTip').hidden = !(Number(prefs.font) > 1 && prefs.monthStyle !== 'column');
 }
 function setPref(k, v) {
   if (k === 'monthStyle' && v === 'column') scrollColPending = true;
@@ -811,6 +826,7 @@ document.querySelectorAll('.seg-btn[data-mode]').forEach(b => b.addEventListener
 document.querySelectorAll('#prefMonthStyle .seg-btn').forEach(b => b.addEventListener('click', () => setPref('monthStyle', b.dataset.v)));
 document.querySelectorAll('#prefFont .seg-btn').forEach(b => b.addEventListener('click', () => setPref('font', b.dataset.v)));
 $('#prefContrast').addEventListener('change', e => setPref('contrast', e.target.checked));
+$('#prefUseColumn').addEventListener('click', () => { setPref('monthStyle', 'column'); toast('「1列」表示にしました'); });
 
 // 「1列」の日付をタップ：その日を選び、下の詳細へ移動
 $('#monthCol').addEventListener('click', e => {

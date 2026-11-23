@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="13">
+  <meta name="app-version" content="14">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -98,6 +98,10 @@
             <button class="seg-btn" data-v="1">標準</button>
             <button class="seg-btn" data-v="1.18">大きい</button>
             <button class="seg-btn" data-v="1.36">とても大きい</button>
+          </div>
+          <div class="tip" id="prefFontTip" hidden>
+            <p>💡 文字を大きくすると、月のカレンダーは数字と予定の件数だけの見やすい形になります。予定の名前まで大きな文字で読みたいときは、<b>「1列」表示</b>がおすすめです。</p>
+            <button class="btn small primary" id="prefUseColumn">「1列」表示にする</button>
           </div>
         </div>
         <label class="set-row toggle-row">
