@@ -22,13 +22,37 @@ const WidgetSetup = (() => {
     return row.token;
   }
 
+  // Scriptable に貼る小さな読み込み役。本体（scriptable-widget.js）は毎回アプリから取ってくるので、
+  // ウィジェットを改良してもスクリプトを貼り直す必要がない。取れないときは前回の本体を使う。
+  const LOADER = `
+const fm = FileManager.local();
+const BODY = fm.joinPath(fm.documentsDirectory(), 'hibilog-widget-body.js');
+let body = null;
+try {
+  const r = new Request(CONFIG.appUrl + 'scriptable-widget.js?t=' + Date.now());
+  r.timeoutInterval = 10;
+  const t = await r.loadString();
+  if (r.response.statusCode === 200 && t.includes('ひびログ ウィジェット本体')) { body = t; fm.writeString(BODY, t); }
+} catch (e) {}
+if (!body && fm.fileExists(BODY)) body = fm.readString(BODY);
+try {
+  if (!body) throw new Error('本体を読み込めませんでした。ネット接続を確認してください。');
+  await (new Function('CONFIG', 'return (async () => {\\n' + body + '\\n})();'))(CONFIG);
+} catch (e) {
+  const w = new ListWidget();
+  w.addText('ひびログ');
+  const t = w.addText(String(e && e.message || e));
+  t.font = Font.systemFont(10);
+  Script.setWidget(w);
+  if (!config.runsInWidget) await w.presentSmall();
+  Script.complete();
+}
+`;
+
   async function build(token) {
-    const res = await fetch('scriptable-widget.js', { cache: 'no-cache' });
-    if (!res.ok) throw new Error('scriptable-widget.js を読み込めませんでした');
-    const body = await res.text();
     const cfg = { url: SUPABASE_URL, key: SUPABASE_KEY, token, appUrl: APP_URL };
     return '// Variables used by Scriptable.\n// icon-color: blue; icon-glyph: calendar-alt;\n' +
-      `// ひびログ ウィジェット（この合言葉は他人に見せないでください）\nconst CONFIG = ${JSON.stringify(cfg)};\n\n` + body;
+      `// ひびログ ウィジェット（この合言葉は他人に見せないでください）\nconst CONFIG = ${JSON.stringify(cfg)};\n` + LOADER;
   }
 
   async function prepare() {

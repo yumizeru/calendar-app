@@ -2,13 +2,19 @@
 
 /* =====================================================================
  * データ
- *  events : [{ id, title, date, time, memo, remind, updatedAt, deleted? }]
- *  habits : [{ id, name, color, createdAt, updatedAt, deleted? }]
- *  marks  : { "YYYY-MM-DD|habitId": { on: bool, t: 更新時刻 } }
+ *  events     : 予定（形は core.js の説明を参照）
+ *  categories : [{ id, name, color, updatedAt, deleted? }]
+ *  habits     : [{ id, name, color, createdAt, updatedAt, deleted? }]
+ *  marks      : { "YYYY-MM-DD|habitId": { on: bool, t: 更新時刻 } }
  * 削除したものも deleted:true で残す（別の端末と同期するときに「消した」ことを伝えるため）
  * ===================================================================== */
 const STORE_KEY = 'hibilog:v1';
-const emptyData = () => ({ version: 2, events: [], habits: [], marks: {} });
+const DEFAULT_CATEGORIES = [
+  { id: 'cat-work', name: '仕事', color: '#4f7cff', updatedAt: 0 },
+  { id: 'cat-private', name: 'プライベート', color: '#22c55e', updatedAt: 0 },
+  { id: 'cat-errand', name: '用事・通院', color: '#f59e0b', updatedAt: 0 },
+];
+const emptyData = () => ({ version: 3, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {} });
 
 function normalize(d) {
   const out = emptyData();
@@ -17,6 +23,12 @@ function normalize(d) {
   out.events = (Array.isArray(d.events) ? d.events : [])
     .filter(e => e && e.id && (e.deleted || (e.date && e.title)))
     .map(e => ({ ...e, updatedAt: num(e.updatedAt) }));
+  if (Array.isArray(d.categories)) {
+    const got = d.categories.filter(c => c && c.id && (c.deleted || c.name)).map(c => ({ ...c, updatedAt: num(c.updatedAt) }));
+    // 初期カテゴリは、相手側になくても残す（同期で消えないように）
+    const ids = new Set(got.map(c => c.id));
+    out.categories = [...got, ...DEFAULT_CATEGORIES.filter(c => !ids.has(c.id)).map(c => ({ ...c }))];
+  }
   out.habits = (Array.isArray(d.habits) ? d.habits : [])
     .filter(h => h && h.id && (h.deleted || h.name))
     .map(h => ({ ...h, updatedAt: num(h.updatedAt) }));
@@ -52,7 +64,13 @@ function mergeData(a, b) {
   for (const [k, v] of Object.entries(b.marks)) {
     if (!marks[k] || v.t > marks[k].t) marks[k] = v;
   }
-  return { version: 2, events: byId(a.events, b.events), habits: byId(a.habits, b.habits), marks };
+  return {
+    version: 3,
+    events: byId(a.events, b.events),
+    categories: byId(a.categories, b.categories),
+    habits: byId(a.habits, b.habits),
+    marks,
+  };
 }
 
 function load() {
@@ -74,22 +92,24 @@ function save() {
   listeners.forEach(fn => { try { fn(); } catch {} });
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const activeEvents = () => data.events.filter(e => !e.deleted);
 const activeHabits = () => data.habits.filter(h => !h.deleted);
+const activeCategories = () => data.categories.filter(c => !c.deleted);
+const NO_CAT_COLOR = '#8b93a7';
+const catOf = ev => data.categories.find(c => c.id === ev.categoryId && !c.deleted) || null;
+const colorOf = ev => (catOf(ev) || {}).color || NO_CAT_COLOR;
 
 /* ========== 日付ユーティリティ ========== */
-const pad = n => String(n).padStart(2, '0');
-const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const WD = ['日', '月', '火', '水', '木', '金', '土'];
+const { pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD } = Core;
 const todayStr = () => ymd(new Date());
+const mdw = s => { const d = parseYmd(s); return `${d.getMonth() + 1}/${d.getDate()}（${WD[d.getDay()]}）`; };
 
 /* ========== 状態 ========== */
 let viewMonth = new Date(); viewMonth.setDate(1);
 let selected = todayStr();
 let currentView = 'calendar';
-let editingId = null;
+let calMode = 'month';
+try { calMode = localStorage.getItem('hibilog:calMode') || 'month'; } catch {}
+let editing = null; // { id, occStart, recurring }
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -119,16 +139,34 @@ function monthRate(hid, month) {
   return { done, days, pct: days ? Math.round(done / days * 100) : 0 };
 }
 
-/* ========== 描画：カレンダー ========== */
-function renderCalendar() {
+/* ========== 予定の行（日パネル・週・リストで共通） ========== */
+function eventRow(o) {
+  const ev = o.ev;
+  const bell = ev.remind != null && ev.remind !== '' ? ' <span class="bell" title="リマインダー">🔔</span>' : '';
+  const rep = ev.repeat ? ' <span class="rep" title="繰り返し">🔁</span>' : '';
+  return `<li data-id="${esc(ev.id)}" data-occ="${esc(o.start)}" style="--c:${esc(colorOf(ev))}">
+    <span class="cbar"></span>
+    <span class="time">${esc(Core.timeLabel(o))}</span>
+    <span class="title">${esc(ev.title)}${rep}${bell}${ev.memo ? `<span class="memo">${esc(ev.memo)}</span>` : ''}</span>
+  </li>`;
+}
+const dayOccurrences = day => Core.onDay(data.events, day);
+
+/* ========== 描画：月 ========== */
+function renderMonth() {
   const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
   $('#monthTitle').textContent = `${y}年${m + 1}月`;
 
   const first = new Date(y, m, 1);
   const start = addDays(first, -first.getDay());
+  const from = ymd(start), to = ymd(addDays(start, 41));
+  const byDay = {};
+  for (const o of Core.expand(data.events, from, to)) {
+    for (let s = o.start < from ? from : o.start; s <= o.end && s <= to; s = addDaysStr(s, 1)) {
+      (byDay[s] = byDay[s] || []).push(o);
+    }
+  }
   const today = todayStr();
-  const evCount = {};
-  for (const e of activeEvents()) evCount[e.date] = (evCount[e.date] || 0) + 1;
   const habits = activeHabits();
 
   let html = '';
@@ -144,30 +182,75 @@ function renderCalendar() {
     if (hol) cls.push('holiday');
     if (s === today) cls.push('today');
     if (s === selected) cls.push('selected');
-    const dots = habits.filter(h => isChecked(s, h.id))
+    const evs = byDay[s] || [];
+    const evDots = evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
+      (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '');
+    const hDots = habits.filter(h => isChecked(s, h.id))
       .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
-    const ec = evCount[s] ? `<span class="ev-count">● ${evCount[s]}</span>` : '';
     const hl = hol ? `<span class="hol-name">${esc(hol)}</span>` : '';
-    html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日${hol ? ' ' + esc(hol) : ''}">
-      <span class="num">${d.getDate()}</span>${hl}${ec}<span class="dots">${dots}</span></button>`;
+    html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
+      <span class="num">${d.getDate()}</span>${hl}<span class="edots">${evDots}</span><span class="dots">${hDots}</span></button>`;
   }
   $('#grid').innerHTML = html;
-  renderDay();
 }
 
+/* ========== 描画：週 ========== */
+function weekStartOf(s) { const d = parseYmd(s); return ymd(addDays(d, -d.getDay())); }
+function renderWeek() {
+  const ws = weekStartOf(selected);
+  const we = addDaysStr(ws, 6);
+  const a = parseYmd(ws), b = parseYmd(we);
+  $('#monthTitle').textContent = `${a.getMonth() + 1}/${a.getDate()} 〜 ${b.getMonth() + 1}/${b.getDate()}`;
+  const today = todayStr();
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const s = addDaysStr(ws, i);
+    const d = parseYmd(s);
+    const hol = JPHolidays.get(s);
+    const red = d.getDay() === 0 || hol;
+    const occ = dayOccurrences(s);
+    html += `<div class="ag-day${s === selected ? ' selected' : ''}${s === today ? ' is-today' : ''}" data-date="${s}">
+      <div class="ag-head${red ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getDate()}</b> ${WD[d.getDay()]}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}<button class="ag-add" data-add="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に予定を追加">＋</button></div>
+      <ul class="event-list">${occ.length ? occ.map(o => eventRow({ ...o, day: s })).join('') : '<li class="empty">予定なし</li>'}</ul>
+    </div>`;
+  }
+  $('#weekView').innerHTML = html;
+}
+
+/* ========== 描画：リスト（今日から60日） ========== */
+function renderList() {
+  $('#monthTitle').textContent = 'これからの予定';
+  const from = todayStr(), to = addDaysStr(from, 59);
+  const occ = Core.expand(data.events, from, to);
+  const byDay = {};
+  for (const o of occ) {
+    const s = o.start < from ? from : o.start; // 複数日の予定は始まりの日（または今日）に1回だけ出す
+    (byDay[s] = byDay[s] || []).push({ ...o, day: s });
+  }
+  const days = Object.keys(byDay).sort();
+  let html = `<div class="ag-toolbar"><span class="muted small">今日から60日間</span><button class="btn primary" data-add="${from}">＋ 予定</button></div>`;
+  if (!days.length) html += '<p class="empty">これからの予定はありません</p>';
+  for (const s of days) {
+    const d = parseYmd(s);
+    const hol = JPHolidays.get(s);
+    const list = byDay[s].sort((x, y) => ((x.ev.time || '') + x.ev.title).localeCompare((y.ev.time || '') + y.ev.title));
+    html += `<div class="ag-day" data-date="${s}">
+      <div class="ag-head${d.getDay() === 0 || hol ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getMonth() + 1}/${d.getDate()}</b> ${WD[d.getDay()]}${s === from ? ' <span class="today-badge">今日</span>' : ''}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}</div>
+      <ul class="event-list">${list.map(o => eventRow(o)).join('')}</ul>
+    </div>`;
+  }
+  $('#listView').innerHTML = html;
+}
+
+/* ========== 描画：選んだ日のパネル ========== */
 function renderDay() {
   const d = parseYmd(selected);
   const hol = JPHolidays.get(selected);
   $('#dayTitle').innerHTML = `${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）` +
     (hol ? ` <span class="hol-badge">${esc(hol)}</span>` : '');
-
-  const evs = activeEvents().filter(e => e.date === selected)
-    .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
-  $('#eventList').innerHTML = evs.length
-    ? evs.map(e => `<li data-id="${esc(e.id)}">
-        <span class="time">${e.time ? esc(e.time) : '終日'}</span>
-        <span class="title">${esc(e.title)}${e.remind != null && e.remind !== '' ? ' <span class="bell" title="リマインダー">🔔</span>' : ''}${e.memo ? `<span class="memo">${esc(e.memo)}</span>` : ''}</span>
-      </li>`).join('')
+  const occ = dayOccurrences(selected);
+  $('#eventList').innerHTML = occ.length
+    ? occ.map(o => eventRow(o)).join('')
     : '<li class="empty" style="cursor:default">予定はありません</li>';
 
   const habits = activeHabits();
@@ -176,6 +259,18 @@ function renderDay() {
         <input type="checkbox" class="check" data-hid="${esc(h.id)}" style="--c:${esc(h.color)}" ${isChecked(selected, h.id) ? 'checked' : ''}>
         <span>${esc(h.name)}</span></label></li>`).join('')
     : '<li class="empty">「習慣」タブから習慣を追加できます</li>';
+}
+
+function renderCalendar() {
+  document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === calMode));
+  $('#monthView').hidden = calMode !== 'month';
+  $('#weekView').hidden = calMode !== 'week';
+  $('#listView').hidden = calMode !== 'list';
+  $('#dayPanel').hidden = calMode === 'list';
+  if (calMode === 'month') renderMonth();
+  else if (calMode === 'week') renderWeek();
+  else renderList();
+  if (calMode !== 'list') renderDay();
 }
 
 /* ========== 描画：習慣 ========== */
@@ -212,11 +307,22 @@ function renderHabits() {
     : '<li class="empty">まだ習慣がありません。上のフォームから追加してください。</li>';
 }
 
+/* ========== 描画：カテゴリ（設定） ========== */
+function renderCategories() {
+  const cats = activeCategories();
+  $('#catList').innerHTML = cats.map(c => `<li>
+    <input type="color" value="${esc(c.color)}" data-cat-color="${esc(c.id)}" aria-label="${esc(c.name)}の色">
+    <span class="name">${esc(c.name)}</span>
+    <button class="btn small" data-cat-rename="${esc(c.id)}">名前変更</button>
+    <button class="btn small danger" data-cat-del="${esc(c.id)}">削除</button>
+  </li>`).join('') || '<li class="empty">カテゴリがありません</li>';
+}
+
 function render() {
   if (currentView === 'calendar') renderCalendar();
   else if (currentView === 'habits') renderHabits();
-  else $('#monthTitle').textContent = '設定';
-  const showNav = currentView !== 'settings';
+  else { $('#monthTitle').textContent = '設定'; renderCategories(); }
+  const showNav = currentView === 'habits' || (currentView === 'calendar' && calMode !== 'list');
   $('#prevMonth').style.visibility = showNav ? '' : 'hidden';
   $('#nextMonth').style.visibility = showNav ? '' : 'hidden';
 }
@@ -231,59 +337,200 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
+/* ========== 「この予定だけ／すべて」を選ぶ ========== */
+function askScope(title) {
+  return new Promise(resolve => {
+    const d = $('#scopeDialog');
+    $('#scopeTitle').textContent = title;
+    const done = v => { d.close(); d.removeEventListener('click', onClick); resolve(v); };
+    const onClick = e => {
+      const b = e.target.closest('[data-scope]');
+      if (b) done(b.dataset.scope);
+      else if (e.target === d) done('cancel');
+    };
+    d.addEventListener('click', onClick);
+    d.addEventListener('cancel', () => done('cancel'), { once: true });
+    d.showModal();
+  });
+}
+
 /* ========== 予定ダイアログ ========== */
 const dlg = $('#eventDialog');
-function openEvent(id) {
-  editingId = id || null;
-  const e = id ? data.events.find(x => x.id === id && !x.deleted) : null;
-  $('#eventDialogTitle').textContent = e ? '予定を編集' : '予定を追加';
-  $('#evTitle').value = e ? e.title : '';
-  $('#evDate').value = e ? e.date : selected;
-  $('#evTime').value = e ? (e.time || '') : '';
-  $('#evMemo').value = e ? (e.memo || '') : '';
-  $('#evRemind').value = e && e.remind != null ? String(e.remind) : '';
-  $('#evDelete').hidden = !e;
-  dlg.showModal();
-  setTimeout(() => $('#evTitle').focus(), 50);
+function fillCategorySelect(value) {
+  $('#evCategory').innerHTML = '<option value="">なし</option>' +
+    activeCategories().map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  $('#evCategory').value = value && activeCategories().some(c => c.id === value) ? value : '';
 }
-$('#eventForm').addEventListener('submit', ev => {
-  ev.preventDefault();
-  const wasEditing = !!editingId;
-  const item = {
-    id: editingId || uid(),
+function setWeekdayChips(days) {
+  document.querySelectorAll('#evWeekdays button').forEach(b => b.classList.toggle('on', days.includes(Number(b.dataset.wd))));
+}
+const chosenWeekdays = () => [...document.querySelectorAll('#evWeekdays button.on')].map(b => Number(b.dataset.wd));
+function syncDialogUi() {
+  const allDay = $('#evAllDay').checked;
+  document.querySelectorAll('#eventForm .time-field').forEach(el => { el.hidden = allDay; });
+  const r = $('#evRepeat').value;
+  $('#repeatOpts').hidden = !r;
+  $('#evWeekdays').hidden = !(r === 'weekly' || r === 'biweekly');
+}
+
+function openEvent(id, occStart, newDate) {
+  const ev = id ? data.events.find(x => x.id === id && !x.deleted) : null;
+  editing = ev ? { id: ev.id, occStart: occStart || ev.date, recurring: !!ev.repeat } : null;
+  const start = ev ? (occStart || ev.date) : (newDate || selected);
+  const dur = ev ? Core.duration(ev) : 0;
+  $('#eventDialogTitle').textContent = ev ? '予定を編集' : '予定を追加';
+  $('#evTitle').value = ev ? ev.title : '';
+  $('#evAllDay').checked = ev ? !ev.time : false;
+  $('#evDate').value = start;
+  $('#evTime').value = ev ? (ev.time || '') : '';
+  $('#evEndDate').value = ev && dur ? addDaysStr(start, dur) : '';
+  $('#evEndTime').value = ev ? (ev.endTime || '') : '';
+  fillCategorySelect(ev ? ev.categoryId : '');
+  const r = ev && ev.repeat;
+  $('#evRepeat').value = !r ? '' : (r.freq === 'weekly' && Number(r.interval) === 2 ? 'biweekly' : r.freq);
+  setWeekdayChips(r && r.byWeekday && r.byWeekday.length ? r.byWeekday : [parseYmd(start).getDay()]);
+  $('#evUntil').value = r && r.until ? r.until : '';
+  $('#evMemo').value = ev ? (ev.memo || '') : '';
+  $('#evRemind').value = ev && ev.remind != null ? String(ev.remind) : '';
+  $('#evDelete').hidden = !ev;
+  syncDialogUi();
+  dlg.showModal();
+  setTimeout(() => { if (!ev) $('#evTitle').focus(); }, 50);
+}
+
+function readForm() {
+  const allDay = $('#evAllDay').checked;
+  const date = $('#evDate').value;
+  let endDate = $('#evEndDate').value;
+  const time = allDay ? '' : $('#evTime').value;
+  const endTime = allDay ? '' : $('#evEndTime').value;
+  if (endDate && endDate <= date) endDate = '';
+  const rv = $('#evRepeat').value;
+  let repeat = null;
+  if (rv) {
+    repeat = { freq: rv === 'biweekly' ? 'weekly' : rv, interval: rv === 'biweekly' ? 2 : 1 };
+    if (repeat.freq === 'weekly') repeat.byWeekday = chosenWeekdays().length ? chosenWeekdays() : [parseYmd(date).getDay()];
+    if ($('#evUntil').value) repeat.until = $('#evUntil').value;
+  }
+  return {
     title: $('#evTitle').value.trim(),
-    date: $('#evDate').value,
-    time: $('#evTime').value,
+    date, time, endDate, endTime,
+    categoryId: $('#evCategory').value || '',
+    repeat,
     memo: $('#evMemo').value.trim(),
     // 何分前に通知するか（null なら通知なし）。終日の予定は当日 9:00 を基準にする
     remind: $('#evRemind').value === '' ? null : Number($('#evRemind').value),
-    updatedAt: Date.now(),
   };
-  if (!item.title || !item.date) return;
-  if (wasEditing) data.events = data.events.map(x => x.id === editingId ? item : x);
-  else data.events.push(item);
+}
+
+function validate(f) {
+  if (!f.title || !f.date) return 'タイトルと開始日を入れてください';
+  const sameDay = !f.endDate || f.endDate === f.date;
+  if (sameDay && f.time && f.endTime && f.endTime <= f.time) return '終了時刻は開始時刻より後にしてください';
+  if (!f.time && f.endTime) return '終了時刻だけを入れることはできません';
+  if (f.repeat && f.repeat.until && f.repeat.until < f.date) return '繰り返しの終わりは開始日より後にしてください';
+  return null;
+}
+
+$('#eventForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = readForm();
+  const err = validate(f);
+  if (err) { toast(err); return; }
+  const now = Date.now();
+  const wasEditing = !!editing;
+
+  if (!editing) {
+    data.events.push({ id: uid(), ...f, exdates: [], updatedAt: now });
+  } else {
+    const cur = data.events.find(x => x.id === editing.id);
+    let scope = 'all';
+    if (editing.recurring) {
+      scope = await askScope('繰り返しの予定を変更します');
+      if (scope === 'cancel') return;
+    }
+    if (scope === 'one') {
+      // この回だけ：元の繰り返しからこの日を外し、別の予定として切り離す
+      cur.exdates = [...new Set([...(cur.exdates || []), editing.occStart])];
+      cur.updatedAt = now;
+      data.events.push({ id: uid(), ...f, repeat: null, exdates: [], parentId: cur.id, origDate: editing.occStart, updatedAt: now });
+    } else if (editing.recurring && f.repeat) {
+      // すべて：開いた回でずらした日数ぶん、繰り返し全体をずらす
+      const shift = diffDays(editing.occStart, f.date);
+      const dur = f.endDate ? diffDays(f.date, f.endDate) : 0;
+      const newStart = addDaysStr(cur.date, shift);
+      Object.assign(cur, f, {
+        date: newStart,
+        endDate: dur ? addDaysStr(newStart, dur) : '',
+        exdates: (cur.exdates || []).map(x => addDaysStr(x, shift)),
+        updatedAt: now,
+      });
+      if (f.repeat.until && f.repeat.until < newStart) delete cur.repeat.until;
+    } else {
+      Object.assign(cur, f, { exdates: f.repeat ? (cur.exdates || []) : [], updatedAt: now });
+    }
+  }
   save();
-  selected = item.date;
-  const d = parseYmd(item.date);
+  selected = f.date;
+  const d = parseYmd(f.date);
   viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
   dlg.close();
   render();
   toast(wasEditing ? '予定を更新しました' : '予定を追加しました');
 });
-$('#evCancel').addEventListener('click', () => dlg.close());
-$('#evDelete').addEventListener('click', () => {
-  if (!editingId || !confirm('この予定を削除しますか？')) return;
-  data.events = data.events.map(x => x.id === editingId ? { id: x.id, deleted: true, updatedAt: Date.now() } : x);
+
+$('#evDelete').addEventListener('click', async () => {
+  if (!editing) return;
+  const cur = data.events.find(x => x.id === editing.id);
+  const now = Date.now();
+  if (editing.recurring) {
+    const scope = await askScope('繰り返しの予定を削除します');
+    if (scope === 'cancel') return;
+    if (scope === 'one') {
+      cur.exdates = [...new Set([...(cur.exdates || []), editing.occStart])];
+      cur.updatedAt = now;
+    } else {
+      data.events = data.events.map(x => (x.id === cur.id || x.parentId === cur.id) ? { id: x.id, deleted: true, updatedAt: now } : x);
+    }
+  } else {
+    if (!confirm('この予定を削除しますか？')) return;
+    data.events = data.events.map(x => x.id === cur.id ? { id: x.id, deleted: true, updatedAt: now } : x);
+  }
   save();
   dlg.close();
   render();
   toast('予定を削除しました');
 });
+$('#evCancel').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+dlg.addEventListener('close', () => { editing = null; });
+$('#evAllDay').addEventListener('change', syncDialogUi);
+$('#evRepeat').addEventListener('change', () => {
+  if (!chosenWeekdays().length) setWeekdayChips([parseYmd($('#evDate').value || selected).getDay()]);
+  syncDialogUi();
+});
+$('#evWeekdays').addEventListener('click', e => {
+  const b = e.target.closest('button[data-wd]');
+  if (b) b.classList.toggle('on');
+});
+$('#evDate').addEventListener('change', () => {
+  // 終了日が開始日より前になったら合わせる
+  if ($('#evEndDate').value && $('#evEndDate').value < $('#evDate').value) $('#evEndDate').value = '';
+});
 
 /* ========== 操作 ========== */
-$('#prevMonth').addEventListener('click', () => { viewMonth.setMonth(viewMonth.getMonth() - 1); render(); });
-$('#nextMonth').addEventListener('click', () => { viewMonth.setMonth(viewMonth.getMonth() + 1); render(); });
+function move(delta) {
+  if (currentView === 'calendar' && calMode === 'week') {
+    selected = addDaysStr(selected, delta * 7);
+    const d = parseYmd(selected);
+    viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  } else {
+    viewMonth.setMonth(viewMonth.getMonth() + delta);
+  }
+  render();
+}
+$('#prevMonth').addEventListener('click', () => move(-1));
+$('#nextMonth').addEventListener('click', () => move(1));
 $('#monthTitle').addEventListener('click', () => {
   if (currentView === 'settings') return;
   viewMonth = new Date(); viewMonth.setDate(1);
@@ -291,15 +538,23 @@ $('#monthTitle').addEventListener('click', () => {
   render();
 });
 
-// スワイプで月移動
+document.querySelectorAll('.seg-btn').forEach(b => b.addEventListener('click', () => {
+  calMode = b.dataset.mode;
+  try { localStorage.setItem('hibilog:calMode', calMode); } catch {}
+  render();
+}));
+
+// スワイプで月・週を移動
 let touchX = null;
-$('#grid').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
-$('#grid').addEventListener('touchend', e => {
-  if (touchX === null) return;
-  const dx = e.changedTouches[0].clientX - touchX;
-  touchX = null;
-  if (Math.abs(dx) > 50) { viewMonth.setMonth(viewMonth.getMonth() + (dx < 0 ? 1 : -1)); render(); }
-});
+for (const el of [$('#grid'), $('#weekView')]) {
+  el.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) > 50) move(dx < 0 ? 1 : -1);
+  });
+}
 
 $('#grid').addEventListener('click', e => {
   const c = e.target.closest('.cell');
@@ -309,11 +564,18 @@ $('#grid').addEventListener('click', e => {
   if (d.getMonth() !== viewMonth.getMonth()) viewMonth = new Date(d.getFullYear(), d.getMonth(), 1);
   renderCalendar();
 });
+// 予定の行・日付・＋ボタン（日パネル・週・リスト共通）
+for (const el of [$('#eventList'), $('#weekView'), $('#listView')]) {
+  el.addEventListener('click', e => {
+    const add = e.target.closest('[data-add]');
+    if (add) { openEvent(null, null, add.dataset.add); return; }
+    const li = e.target.closest('li[data-id]');
+    if (li) { openEvent(li.dataset.id, li.dataset.occ); return; }
+    const day = e.target.closest('.ag-day');
+    if (day && calMode === 'week') { selected = day.dataset.date; renderCalendar(); }
+  });
+}
 $('#addEvent').addEventListener('click', () => openEvent());
-$('#eventList').addEventListener('click', e => {
-  const li = e.target.closest('li[data-id]');
-  if (li) openEvent(li.dataset.id);
-});
 $('#habitChecks').addEventListener('change', e => {
   const hid = e.target.dataset.hid;
   if (hid) { toggleCheck(selected, hid); renderCalendar(); }
@@ -344,6 +606,39 @@ $('#habitList').addEventListener('click', e => {
   } else if (b.dataset.hid && b.dataset.date) {
     toggleCheck(b.dataset.date, b.dataset.hid);
     renderHabits();
+  }
+});
+
+/* ========== カテゴリの操作 ========== */
+$('#catForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#catName').value.trim();
+  if (!name) return;
+  data.categories.push({ id: uid(), name: name.slice(0, 20), color: $('#catColor').value, updatedAt: Date.now() });
+  save();
+  $('#catName').value = '';
+  renderCategories();
+  toast('カテゴリを追加しました');
+});
+$('#catList').addEventListener('change', e => {
+  const id = e.target.dataset.catColor;
+  if (!id) return;
+  const c = data.categories.find(x => x.id === id);
+  c.color = e.target.value; c.updatedAt = Date.now();
+  save();
+});
+$('#catList').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const id = b.dataset.catRename || b.dataset.catDel;
+  const c = data.categories.find(x => x.id === id);
+  if (!c) return;
+  if (b.dataset.catRename) {
+    const name = prompt('新しい名前', c.name);
+    if (name && name.trim()) { c.name = name.trim().slice(0, 20); c.updatedAt = Date.now(); save(); renderCategories(); }
+  } else if (confirm(`カテゴリ「${c.name}」を削除しますか？（予定は消えず、カテゴリなしになります）`)) {
+    data.categories = data.categories.map(x => x.id === id ? { id, deleted: true, updatedAt: Date.now() } : x);
+    save(); renderCategories();
   }
 });
 
@@ -394,13 +689,13 @@ $('#resetBtn').addEventListener('click', () => {
   toast('すべて削除しました');
 });
 
-/* ========== 他のファイル（sync.js）から使う窓口 ========== */
+/* ========== 他のファイル（sync.js など）から使う窓口 ========== */
 window.App = {
   get data() { return data; },
   replaceData(d) {
     data = normalize(d);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
-    if (!dlg.open) render();
+    if (!dlg.open && !$('#scopeDialog').open) render();
   },
   mergeData,
   normalize,
@@ -445,7 +740,7 @@ const Updater = (() => {
       // 公開直後は配信サーバーの反映待ちで古い版が返ることがある。直前に更新したばかりなら繰り返さない
       const last = Number(s(() => sessionStorage.getItem(FLAG))) || 0;
       if (!manual && Date.now() - last < 5 * 60 * 1000) return;
-      if (dlg.open && !manual) return; // 予定の編集中は待つ
+      if ((dlg.open || $('#scopeDialog').open) && !manual) return; // 予定の編集中は待つ
       toast('新しいバージョンに更新しています…');
       setTimeout(apply, 700);
     } catch {

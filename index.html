@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="6">
+  <meta name="app-version" content="7">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -27,12 +27,22 @@
   <main>
     <!-- カレンダー -->
     <section class="view" id="view-calendar">
-      <div class="weekdays">
-        <span class="sun">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="sat">土</span>
+      <div class="seg" role="tablist" aria-label="表示の切り替え">
+        <button class="seg-btn active" data-mode="month">月</button>
+        <button class="seg-btn" data-mode="week">週</button>
+        <button class="seg-btn" data-mode="list">リスト</button>
       </div>
-      <div class="grid" id="grid"></div>
 
-      <div class="day-panel">
+      <div id="monthView">
+        <div class="weekdays">
+          <span class="sun">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="sat">土</span>
+        </div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div id="weekView" class="agenda" hidden></div>
+      <div id="listView" class="agenda" hidden></div>
+
+      <div class="day-panel" id="dayPanel">
         <div class="day-head">
           <h2 id="dayTitle"></h2>
           <button class="btn primary" id="addEvent">＋ 予定</button>
@@ -80,6 +90,16 @@
             <button class="btn" id="logoutBtn">ログアウト</button>
           </div>
         </div>
+      </div>
+      <div class="card">
+        <h3>カテゴリ</h3>
+        <p class="muted">予定の色分けに使います。名前と色を変えたり、増やしたりできます。</p>
+        <ul class="cat-list" id="catList"></ul>
+        <form id="catForm" class="habit-form">
+          <input id="catName" type="text" placeholder="新しいカテゴリ（例：趣味）" maxlength="20" required>
+          <input id="catColor" type="color" value="#a855f7" aria-label="色">
+          <button class="btn primary" type="submit">追加</button>
+        </form>
       </div>
       <div class="card" id="pushCard" hidden>
         <h3>リマインダー通知</h3>
@@ -135,9 +155,33 @@
     <form method="dialog" id="eventForm">
       <h3 id="eventDialogTitle">予定</h3>
       <label>タイトル<input id="evTitle" type="text" maxlength="60" required></label>
+      <label class="check-row"><input id="evAllDay" type="checkbox"> 終日</label>
       <div class="row">
-        <label>日付<input id="evDate" type="date" required></label>
-        <label>時刻<input id="evTime" type="time"></label>
+        <label>開始日<input id="evDate" type="date" required></label>
+        <label class="time-field">開始<input id="evTime" type="time"></label>
+      </div>
+      <div class="row">
+        <label>終了日<input id="evEndDate" type="date"></label>
+        <label class="time-field">終了<input id="evEndTime" type="time"></label>
+      </div>
+      <div class="row">
+        <label>カテゴリ<select id="evCategory"></select></label>
+        <label>繰り返し
+          <select id="evRepeat">
+            <option value="">しない</option>
+            <option value="daily">毎日</option>
+            <option value="weekly">毎週</option>
+            <option value="biweekly">隔週</option>
+            <option value="monthly">毎月</option>
+            <option value="yearly">毎年</option>
+          </select>
+        </label>
+      </div>
+      <div id="repeatOpts" hidden>
+        <div class="wd-chips" id="evWeekdays">
+          <button type="button" data-wd="0">日</button><button type="button" data-wd="1">月</button><button type="button" data-wd="2">火</button><button type="button" data-wd="3">水</button><button type="button" data-wd="4">木</button><button type="button" data-wd="5">金</button><button type="button" data-wd="6">土</button>
+        </div>
+        <label>繰り返しの終わり（空欄ならずっと）<input id="evUntil" type="date"></label>
       </div>
       <label>リマインダー
         <select id="evRemind">
@@ -161,10 +205,21 @@
     </form>
   </dialog>
 
+  <dialog id="scopeDialog">
+    <h3 id="scopeTitle">繰り返しの予定です</h3>
+    <p class="muted">どの予定に適用しますか？</p>
+    <div class="stack">
+      <button class="btn" data-scope="one">この予定だけ</button>
+      <button class="btn primary" data-scope="all">すべての予定</button>
+      <button class="btn" data-scope="cancel">キャンセル</button>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
   <script src="holidays.js"></script>
+  <script src="core.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
   <script src="push.js"></script>

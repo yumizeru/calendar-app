@@ -95,6 +95,36 @@ main { max-width: 640px; margin: 0 auto; padding: 0 12px 16px; }
   font-size: .62rem; color: var(--accent); font-weight: 700; line-height: 1;
 }
 
+/* 表示の切り替え（月・週・リスト） */
+.seg { display: flex; background: var(--surface-2); border-radius: 10px; padding: 3px; margin-bottom: 10px; }
+.seg-btn {
+  flex: 1; border: 0; background: none; padding: 7px 0; border-radius: 8px; cursor: pointer;
+  font-size: .85rem; font-weight: 600; color: var(--muted);
+}
+.seg-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* 月表示の予定の点 */
+.cell .edots { display: flex; gap: 2px; align-items: center; min-height: 6px; }
+.edot { width: 6px; height: 6px; border-radius: 2px; }
+.cell .more { font-size: .55rem; color: var(--muted); line-height: 1; }
+
+/* 週・リスト表示 */
+.agenda { display: flex; flex-direction: column; gap: 8px; }
+.ag-day { background: var(--surface); border-radius: var(--radius); padding: 10px 12px; border: 1px solid transparent; }
+.ag-day.selected { border-color: var(--accent); }
+.ag-day.is-today .ag-head b { color: var(--accent); }
+.ag-head { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); margin-bottom: 2px; }
+.ag-head b { font-size: 1.05rem; color: var(--text); }
+.ag-head.red, .ag-head.red b { color: var(--sun); }
+.ag-head.blue, .ag-head.blue b { color: var(--sat); }
+.ag-add {
+  margin-left: auto; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--accent); font-size: 1rem; cursor: pointer; line-height: 1;
+}
+.ag-toolbar { display: flex; align-items: center; justify-content: space-between; }
+.today-badge { font-size: .7rem; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 8px; }
+.agenda .empty { padding: 4px 4px 2px; }
+
 /* 日パネル */
 .day-panel { margin-top: 14px; background: var(--surface); border-radius: var(--radius); padding: 14px; }
 .day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -105,8 +135,10 @@ main { max-width: 640px; margin: 0 auto; padding: 0 12px 16px; }
   display: flex; gap: 10px; align-items: baseline;
   padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer;
 }
+.event-list .cbar { width: 4px; align-self: stretch; border-radius: 2px; background: var(--c, transparent); flex: none; }
+.event-list .rep { font-size: .7rem; }
 .event-list li:last-child { border-bottom: 0; }
-.event-list .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; min-width: 3.2em; }
+.event-list .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .8rem; min-width: 4.6em; }
 .event-list .title { font-weight: 600; word-break: break-word; }
 .event-list .memo { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: 2px; white-space: pre-wrap; }
 .empty { color: var(--muted); font-size: .85rem; padding: 8px 4px; }
@@ -196,6 +228,21 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 dialog h3 { margin: 0 0 12px; }
 dialog label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); margin-bottom: 10px; flex: 1; }
 dialog .hint { font-size: .72rem; color: var(--muted); line-height: 1.4; }
+dialog { max-height: 92vh; overflow-y: auto; }
+dialog label.check-row { flex-direction: row; align-items: center; gap: 8px; font-size: .9rem; color: var(--text); }
+dialog label.check-row input { width: auto; }
+.wd-chips { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
+.wd-chips button {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 7px 0;
+  font-size: .85rem; cursor: pointer; color: var(--muted);
+}
+.wd-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+/* カテゴリ（設定） */
+.cat-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.cat-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.cat-list .name { flex: 1; font-weight: 600; }
+.cat-list input[type=color] { width: 32px; height: 28px; border: 1px solid var(--border); border-radius: 8px; padding: 1px; background: var(--bg); }
 dialog input, dialog textarea, dialog select {
   padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 1rem; width: 100%;
 }

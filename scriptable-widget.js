@@ -77,13 +77,63 @@ async function loadData() {
   }
 }
 
+/* ---------- 繰り返し・複数日の予定を1回ずつに展開（アプリの core.js と同じ考え方） ---------- */
+const addDaysStr = (s, n) => ymd(addDays(parseYmd(s), n));
+const diffDays = (a, b) => {
+  const [ay, am, ad] = a.split('-').map(Number), [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+};
+function matches(ev, s) {
+  if (s < ev.date) return false;
+  const r = ev.repeat;
+  if (r.until && s > r.until) return false;
+  const iv = Math.max(1, Number(r.interval) || 1);
+  const st = parseYmd(ev.date), d = parseYmd(s);
+  if (r.freq === 'daily') return diffDays(ev.date, s) % iv === 0;
+  if (r.freq === 'weekly') {
+    const days = r.byWeekday && r.byWeekday.length ? r.byWeekday : [st.getDay()];
+    if (!days.includes(d.getDay())) return false;
+    return Math.floor(diffDays(ymd(addDays(st, -st.getDay())), ymd(addDays(d, -d.getDay()))) / 7) % iv === 0;
+  }
+  if (r.freq === 'monthly') return d.getDate() === st.getDate() && ((d.getFullYear() - st.getFullYear()) * 12 + d.getMonth() - st.getMonth()) % iv === 0;
+  if (r.freq === 'yearly') return d.getMonth() === st.getMonth() && d.getDate() === st.getDate() && (d.getFullYear() - st.getFullYear()) % iv === 0;
+  return s === ev.date;
+}
+function expand(events, from, to) {
+  const out = [];
+  for (const ev of events) {
+    const dur = ev.endDate && ev.endDate > ev.date ? diffDays(ev.date, ev.endDate) : 0;
+    if (!ev.repeat) {
+      const end = addDaysStr(ev.date, dur);
+      if (ev.date <= to && end >= from) out.push({ ev, start: ev.date, end });
+      continue;
+    }
+    const ex = new Set(ev.exdates || []);
+    let s = ev.date > addDaysStr(from, -dur) ? ev.date : addDaysStr(from, -dur);
+    for (let g = 0; s <= to && g < 400; g++, s = addDaysStr(s, 1)) {
+      if (!ex.has(s) && matches(ev, s)) out.push({ ev, start: s, end: addDaysStr(s, dur) });
+    }
+  }
+  return out;
+}
+function timeOf(o, day) {
+  const ev = o.ev;
+  if (o.end > o.start) {
+    if (day === o.start) return ev.time ? `${ev.time}〜` : '終日〜';
+    if (day === o.end) return ev.endTime ? `〜${ev.endTime}` : '〜終日';
+    return '終日';
+  }
+  return ev.time ? ev.time : '終日';
+}
+
 function view(data) {
   const today = ymd(new Date());
   const events = (data.events || []).filter(e => !e.deleted && e.date && e.title);
+  const cats = {};
+  for (const c of data.categories || []) if (!c.deleted) cats[c.id] = c.color;
   const habits = (data.habits || []).filter(h => !h.deleted && h.name);
   const marks = data.marks || {};
   const on = (d, id) => !!(marks[`${d}|${id}`] || {}).on;
-  const byTime = (a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99'));
   const streak = id => {
     let d = new Date();
     if (!on(ymd(d), id)) d = addDays(d, -1);
@@ -91,11 +141,20 @@ function view(data) {
     while (on(ymd(d), id)) { n++; d = addDays(d, -1); }
     return n;
   };
+  const toItem = (o, day) => ({
+    date: day, title: o.ev.title, time: timeOf(o, day),
+    sort: (o.ev.time && day === o.start ? o.ev.time : '00:00') + o.ev.title,
+    color: cats[o.ev.categoryId] || null,
+  });
   const weekEnd = ymd(addDays(new Date(), 7));
+  const tomorrow = ymd(addDays(new Date(), 1));
+  const all = expand(events, today, weekEnd);
+  const todayEvents = all.filter(o => o.start <= today && o.end >= today).map(o => toItem(o, today))
+    .sort((a, b) => a.sort.localeCompare(b.sort));
+  const upcoming = all.filter(o => o.start >= tomorrow).map(o => toItem(o, o.start))
+    .sort((a, b) => (a.date + a.sort).localeCompare(b.date + b.sort));
   return {
-    today,
-    todayEvents: events.filter(e => e.date === today).sort(byTime),
-    upcoming: events.filter(e => e.date > today && e.date <= weekEnd).sort(byTime),
+    today, todayEvents, upcoming,
     habits: habits.map(h => ({ name: h.name, color: h.color || '#4f7cff', done: on(today, h.id), streak: streak(h.id) })),
   };
 }
@@ -122,8 +181,8 @@ function header(stack, size) {
 function eventLine(stack, e, size, withDate) {
   const row = stack.addStack();
   row.centerAlignContent();
-  const when = (withDate ? md(parseYmd(e.date)) + ' ' : '') + (e.time || '終日');
-  text(row, when, size * 0.85, COL.accent, true);
+  const when = (withDate ? md(parseYmd(e.date)) + ' ' : '') + e.time;
+  text(row, when, size * 0.85, e.color ? new Color(e.color) : COL.accent, true);
   row.addSpacer(5);
   text(row, e.title, size);
 }

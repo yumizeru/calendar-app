@@ -97,23 +97,28 @@ const Cloud = (() => {
   function buildReminders(d) {
     const now = Date.now();
     const limit = now + 60 * 24 * 3600 * 1000; // 60日先まで
+    const from = Core.ymd(new Date(now - 86400000));
+    const to = Core.ymd(new Date(limit + 86400000));
     const items = [];
-    for (const e of d.events) {
-      if (e.deleted || e.remind == null || e.remind === '') continue;
-      const [y, m, day] = e.date.split('-').map(Number);
+    // 繰り返しの予定も1回ずつに展開してから通知時刻を計算する
+    for (const o of Core.expand(d.events, from, to)) {
+      const e = o.ev;
+      if (e.remind == null || e.remind === '' || o.start < from) continue;
+      const [y, m, day] = o.start.split('-').map(Number);
       const [hh, mm] = (e.time || '09:00').split(':').map(Number);
       const base = new Date(y, m - 1, day, hh, mm).getTime();
       const fire = base - Number(e.remind) * 60000;
       if (fire < now - 60000 || fire > limit) continue;
-      const when = e.time ? e.time : '終日';
+      const when = e.time ? (e.endTime ? `${e.time}–${e.endTime}` : e.time) : '終日';
       const lead = Number(e.remind) === 0 ? '' : Number(e.remind) === 1440 ? '明日 ' : `${e.remind >= 60 ? e.remind / 60 + '時間' : e.remind + '分'}後 `;
       items.push({
-        event_id: e.id,
+        event_id: o.key,
         fire_at: new Date(fire).toISOString(),
         title: e.title,
         body: `${lead}${when}${e.memo ? '・' + e.memo.slice(0, 60) : ''}`,
       });
     }
+    items.sort((a, b) => a.fire_at.localeCompare(b.fire_at));
     return items.slice(0, 500);
   }
 
