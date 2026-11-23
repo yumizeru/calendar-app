@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="12">
+  <meta name="app-version" content="13">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -34,10 +34,11 @@
       </div>
 
       <div id="monthView">
-        <div class="weekdays">
+        <div class="weekdays" id="weekdayHead">
           <span class="sun">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="sat">土</span>
         </div>
         <div class="grid" id="grid"></div>
+        <div class="mcol" id="monthCol" hidden></div>
       </div>
       <div id="weekView" class="agenda" hidden></div>
       <div id="listView" class="agenda" hidden></div>
@@ -80,6 +81,31 @@
 
     <!-- 設定 -->
     <section class="view" id="view-settings" hidden>
+      <div class="card">
+        <h3>見やすさ・表示</h3>
+        <div class="set-row">
+          <span>月表示のスタイル</span>
+          <div class="seg" id="prefMonthStyle">
+            <button class="seg-btn" data-v="dots">シンプル</button>
+            <button class="seg-btn" data-v="titles">予定名</button>
+            <button class="seg-btn" data-v="column">1列</button>
+          </div>
+          <p class="muted small" id="prefMonthHint"></p>
+        </div>
+        <div class="set-row">
+          <span>文字の大きさ</span>
+          <div class="seg" id="prefFont">
+            <button class="seg-btn" data-v="1">標準</button>
+            <button class="seg-btn" data-v="1.18">大きい</button>
+            <button class="seg-btn" data-v="1.36">とても大きい</button>
+          </div>
+        </div>
+        <label class="set-row toggle-row">
+          <span>くっきり表示<small class="muted small">文字を濃く・太くして、枠線をはっきりさせます</small></span>
+          <input type="checkbox" class="switch" id="prefContrast">
+        </label>
+        <p class="muted small">この端末だけの設定です（ほかの端末や共有相手には影響しません）。</p>
+      </div>
       <div class="card" id="cloudCard">
         <h3>クラウド同期</h3>
         <div id="cloudOut">

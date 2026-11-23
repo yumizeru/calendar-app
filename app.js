@@ -195,6 +195,12 @@ function renderMonth() {
   const todoCount = {};
   for (const t of activeTodos()) if (t.due && !t.done) todoCount[t.due] = (todoCount[t.due] || 0) + 1;
 
+  const style = prefs.monthStyle;
+  $('#weekdayHead').hidden = style === 'column';
+  $('#grid').hidden = style === 'column';
+  $('#monthCol').hidden = style !== 'column';
+  if (style === 'column') { renderMonthColumn(y, m, byDay, todoCount, today, habits); return; }
+
   let html = '';
   for (let i = 0; i < 42; i++) {
     const d = addDays(start, i);
@@ -208,10 +214,15 @@ function renderMonth() {
     if (hol) cls.push('holiday');
     if (s === today) cls.push('today');
     if (s === selected) cls.push('selected');
-    const evs = byDay[s] || [];
-    const evDots = evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
-      (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
-      (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
+    const evs = (byDay[s] || []).slice().sort((a, b) => ((a.ev.time || '') + a.ev.title).localeCompare((b.ev.time || '') + b.ev.title));
+    // 「予定名」スタイルは色付きの帯にタイトルを出す。「シンプル」は色の点だけ
+    const evDots = style === 'titles'
+      ? evs.slice(0, 3).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(o.ev.title)}</span>`).join('') +
+        (evs.length > 3 ? `<span class="more">+${evs.length - 3}</span>` : '') +
+        (todoCount[s] ? `<span class="tchip">☐${todoCount[s]}</span>` : '')
+      : evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
+        (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
+        (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
     const hDots = habits.filter(h => isDoneOn(h, s))
       .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
     const hl = hol ? `<span class="hol-name">${esc(hol)}</span>` : '';
@@ -219,6 +230,71 @@ function renderMonth() {
       <span class="num">${d.getDate()}</span>${hl}<span class="edots">${evDots}</span><span class="dots">${hDots}</span></button>`;
   }
   $('#grid').innerHTML = html;
+}
+
+// 「1列」スタイル：その月の日付を縦に並べ、予定を文字で大きく出す
+function renderMonthColumn(y, m, byDay, todoCount, today, habits) {
+  const last = new Date(y, m + 1, 0).getDate();
+  let html = '';
+  for (let i = 1; i <= last; i++) {
+    const s = `${y}-${pad(m + 1)}-${pad(i)}`;
+    const d = parseYmd(s);
+    const hol = JPHolidays.get(s);
+    const cls = ['mrow'];
+    if (d.getDay() === 0 || hol) cls.push('red'); else if (d.getDay() === 6) cls.push('blue');
+    if (s === today) cls.push('today');
+    if (s === selected) cls.push('selected');
+    if (s !== today && s !== selected && !(byDay[s] || []).length && !todoCount[s] && !hol && !habits.some(h => isDoneOn(h, s))) cls.push('blank');
+    const evs = (byDay[s] || []).map(o => ({ ...o, day: s }))
+      .sort((a, b) => ((a.start < s ? '' : (a.ev.time || '')) + a.ev.title).localeCompare((b.start < s ? '' : (b.ev.time || '')) + b.ev.title));
+    const lines = evs.slice(0, 4).map(o => `<span class="mline" style="--c:${esc(colorOf(o.ev))}"><i></i><span class="t">${esc(Core.timeLabel(o))}</span><span class="tt">${esc(o.ev.title)}</span></span>`).join('') +
+      (evs.length > 4 ? `<span class="mline more-line">ほか${evs.length - 4}件</span>` : '');
+    const hDots = habits.filter(h => isDoneOn(h, s)).map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
+    const extra = (todoCount[s] ? `<span class="mtag">☐ ToDo ${todoCount[s]}</span>` : '') + (hDots ? `<span class="mdots">${hDots}</span>` : '');
+    html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${m + 1}月${i}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
+      <span class="mdate"><b>${i}</b><small>${WD[d.getDay()]}</small></span>
+      <span class="mbody">${hol ? `<span class="hol-badge">${esc(hol)}</span>` : ''}${lines}${extra ? `<span class="mextra">${extra}</span>` : ''}</span>
+    </button>`;
+  }
+  $('#monthCol').innerHTML = html;
+  // 月を開いたとき・今日に戻ったときだけ、選んでいる日（ふつうは今日）まで自動で移動
+  if (scrollColPending) {
+    scrollColPending = false;
+    const row = $('#monthCol .mrow.selected') || $('#monthCol .mrow.today');
+    if (row && row.dataset.date !== `${y}-${pad(m + 1)}-01`) {
+      requestAnimationFrame(() => row.scrollIntoView({ block: 'center' }));
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
+}
+let scrollColPending = true;
+
+/* ========== 見やすさの設定（この端末だけ） ========== */
+const PREFS_KEY = 'hibilog:prefs';
+const prefs = { monthStyle: 'dots', font: '1', contrast: false };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY)) || {}); } catch {}
+const MONTH_HINTS = {
+  dots: '予定を色の点で表示します。ひと目で月全体を見たいときに。',
+  titles: '予定の名前を日付のマスに表示します（長い名前は途中まで）。',
+  column: '1か月の日付を縦に1列で並べ、予定を大きな文字で表示します。',
+};
+function applyPrefs() {
+  document.documentElement.style.setProperty('--fs', prefs.font);
+  document.documentElement.dataset.fs = prefs.font;
+  document.body.classList.toggle('hc', !!prefs.contrast);
+  document.body.dataset.monthStyle = prefs.monthStyle;
+  document.querySelectorAll('#prefMonthStyle .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.monthStyle));
+  document.querySelectorAll('#prefFont .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.v === String(prefs.font)));
+  $('#prefContrast').checked = !!prefs.contrast;
+  $('#prefMonthHint').textContent = MONTH_HINTS[prefs.monthStyle] || '';
+}
+function setPref(k, v) {
+  if (k === 'monthStyle' && v === 'column') scrollColPending = true;
+  prefs[k] = v;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
+  applyPrefs();
+  render();
 }
 
 /* ========== 描画：週 ========== */
@@ -323,7 +399,7 @@ function habitDayRow(h, s) {
 }
 
 function renderCalendar() {
-  document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === calMode));
+  document.querySelectorAll('.seg-btn[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === calMode));
   $('#monthView').hidden = calMode !== 'month';
   $('#weekView').hidden = calMode !== 'week';
   $('#listView').hidden = calMode !== 'list';
@@ -714,6 +790,7 @@ function move(delta) {
   } else {
     viewMonth.setMonth(viewMonth.getMonth() + delta);
   }
+  scrollColPending = true;
   render();
 }
 $('#prevMonth').addEventListener('click', () => move(-1));
@@ -722,18 +799,31 @@ $('#monthTitle').addEventListener('click', () => {
   if (currentView === 'settings') return;
   viewMonth = new Date(); viewMonth.setDate(1);
   selected = todayStr();
+  scrollColPending = true;
   render();
 });
 
-document.querySelectorAll('.seg-btn').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('.seg-btn[data-mode]').forEach(b => b.addEventListener('click', () => {
   calMode = b.dataset.mode;
   try { localStorage.setItem('hibilog:calMode', calMode); } catch {}
   render();
 }));
+document.querySelectorAll('#prefMonthStyle .seg-btn').forEach(b => b.addEventListener('click', () => setPref('monthStyle', b.dataset.v)));
+document.querySelectorAll('#prefFont .seg-btn').forEach(b => b.addEventListener('click', () => setPref('font', b.dataset.v)));
+$('#prefContrast').addEventListener('change', e => setPref('contrast', e.target.checked));
+
+// 「1列」の日付をタップ：その日を選び、下の詳細へ移動
+$('#monthCol').addEventListener('click', e => {
+  const r = e.target.closest('.mrow');
+  if (!r) return;
+  selected = r.dataset.date;
+  renderCalendar();
+  $('#dayPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 // スワイプで月・週を移動
 let touchX = null;
-for (const el of [$('#grid'), $('#weekView')]) {
+for (const el of [$('#grid'), $('#weekView'), $('#monthCol')]) {
   el.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
   el.addEventListener('touchend', e => {
     if (touchX === null) return;
@@ -1167,6 +1257,7 @@ const Updater = (() => {
 })();
 
 /* ========== 起動 ========== */
+applyPrefs();
 render();
 // 日付が変わったら「今日」表示を更新
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !dlg.open) render(); });
