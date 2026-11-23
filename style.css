@@ -284,6 +284,38 @@ dialog label.check-row input { width: auto; }
 dialog label.color-field { flex: 0 0 64px; }
 dialog label.color-field input { height: 42px; padding: 2px; }
 
+/* ToDo */
+.quick-add { display: flex; gap: 6px; margin: 4px 0 12px; }
+.quick-add input[type=text] {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 1rem;
+}
+.quick-add input[type=date] {
+  width: 128px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: .8rem;
+}
+.todo-group h3 { display: flex; align-items: center; gap: 8px; font-size: .9rem; margin: 0 0 4px; }
+.todo-group.overdue h3 { color: var(--danger); }
+.todo-group .count { font-size: .72rem; color: var(--muted); font-weight: 600; background: var(--surface-2); border-radius: 999px; padding: 0 8px; }
+.todo-group h3 .btn { margin-left: auto; }
+.todo-list { list-style: none; margin: 0; padding: 0; }
+.todo-list li.todo { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.todo-list li.todo:last-child { border-bottom: 0; }
+.todo-list .check { --c: var(--muted); border-radius: 50%; width: 22px; height: 22px; }
+.todo-list .ttitle { flex: 1; min-width: 0; word-break: break-word; }
+.todo-list li.done .ttitle { text-decoration: line-through; color: var(--muted); }
+.todo-list .star { color: #f59e0b; margin-right: 4px; }
+.todo-list .memo { display: block; font-size: .75rem; color: var(--muted); }
+.tdue { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+.tdue.overdue { color: var(--danger); font-weight: 700; }
+.todo-list.compact li.todo { padding: 6px 2px; font-size: .9rem; }
+.link-btn { border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; padding: 0; display: flex; align-items: center; gap: 6px; }
+.empty.center { text-align: center; line-height: 1.8; padding: 24px 0; }
+.cell .tdot { width: 6px; height: 6px; border: 1.5px solid var(--muted); border-radius: 2px; box-sizing: border-box; }
+.tab { position: relative; }
+.tab-badge {
+  position: absolute; top: 6px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--danger); color: #fff; font-size: .62rem; font-weight: 700; line-height: 16px;
+}
+
 /* カテゴリ（設定） */
 .cat-list { list-style: none; margin: 0 0 10px; padding: 0; }
 .cat-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }

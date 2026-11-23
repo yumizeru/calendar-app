@@ -4,7 +4,8 @@
  * データ
  *  events     : 予定（形は core.js の説明を参照）
  *  categories : [{ id, name, color, updatedAt, deleted? }]
- *  habits     : [{ id, name, color, createdAt, updatedAt, deleted? }]
+ *  habits     : 習慣（形は core.js の説明を参照）
+ *  todos      : [{ id, title, due, memo, star, done, doneAt, updatedAt, deleted? }]  due は 'YYYY-MM-DD' か ''
  *  marks      : { "YYYY-MM-DD|habitId": { on: bool, t: 更新時刻 } }
  * 削除したものも deleted:true で残す（別の端末と同期するときに「消した」ことを伝えるため）
  * ===================================================================== */
@@ -14,7 +15,7 @@ const DEFAULT_CATEGORIES = [
   { id: 'cat-private', name: 'プライベート', color: '#22c55e', updatedAt: 0 },
   { id: 'cat-errand', name: '用事・通院', color: '#f59e0b', updatedAt: 0 },
 ];
-const emptyData = () => ({ version: 3, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {} });
+const emptyData = () => ({ version: 4, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {}, todos: [] });
 
 function normalize(d) {
   const out = emptyData();
@@ -32,6 +33,9 @@ function normalize(d) {
   out.habits = (Array.isArray(d.habits) ? d.habits : [])
     .filter(h => h && h.id && (h.deleted || h.name))
     .map(h => ({ ...h, updatedAt: num(h.updatedAt) }));
+  out.todos = (Array.isArray(d.todos) ? d.todos : [])
+    .filter(x => x && x.id && (x.deleted || x.title))
+    .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
   if (d.marks && typeof d.marks === 'object') {
     for (const [k, v] of Object.entries(d.marks)) {
       if (v && typeof v === 'object') {
@@ -69,11 +73,12 @@ function mergeData(a, b) {
     if (!marks[k] || v.t > marks[k].t) marks[k] = v;
   }
   return {
-    version: 3,
+    version: 4,
     events: byId(a.events, b.events),
     categories: byId(a.categories, b.categories),
     habits: byId(a.habits, b.habits),
     marks,
+    todos: byId(a.todos, b.todos),
   };
 }
 
@@ -180,6 +185,8 @@ function renderMonth() {
   }
   const today = todayStr();
   const habits = activeHabits();
+  const todoCount = {};
+  for (const t of activeTodos()) if (t.due && !t.done) todoCount[t.due] = (todoCount[t.due] || 0) + 1;
 
   let html = '';
   for (let i = 0; i < 42; i++) {
@@ -196,7 +203,8 @@ function renderMonth() {
     if (s === selected) cls.push('selected');
     const evs = byDay[s] || [];
     const evDots = evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
-      (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '');
+      (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
+      (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
     const hDots = habits.filter(h => isDoneOn(h, s))
       .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
     const hl = hol ? `<span class="hol-name">${esc(hol)}</span>` : '';
@@ -221,9 +229,11 @@ function renderWeek() {
     const hol = JPHolidays.get(s);
     const red = d.getDay() === 0 || hol;
     const occ = dayOccurrences(s);
+    const tds = activeTodos().filter(t => t.due === s).sort(todoSort);
     html += `<div class="ag-day${s === selected ? ' selected' : ''}${s === today ? ' is-today' : ''}" data-date="${s}">
       <div class="ag-head${red ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getDate()}</b> ${WD[d.getDay()]}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}<button class="ag-add" data-add="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に予定を追加">＋</button></div>
-      <ul class="event-list">${occ.length ? occ.map(o => eventRow({ ...o, day: s })).join('') : '<li class="empty">予定なし</li>'}</ul>
+      <ul class="event-list">${occ.length ? occ.map(o => eventRow({ ...o, day: s })).join('') : (tds.length ? '' : '<li class="empty">予定なし</li>')}</ul>
+      ${tds.length ? `<ul class="todo-list compact">${tds.map(t => todoRow(t, { hideDue: true })).join('')}</ul>` : ''}
     </div>`;
   }
   $('#weekView').innerHTML = html;
@@ -239,16 +249,25 @@ function renderList() {
     const s = o.start < from ? from : o.start; // 複数日の予定は始まりの日（または今日）に1回だけ出す
     (byDay[s] = byDay[s] || []).push({ ...o, day: s });
   }
-  const days = Object.keys(byDay).sort();
+  // 期限つきの未完了ToDoも並べる（期限切れは今日の欄へ）
+  const todoByDay = {};
+  for (const t of activeTodos()) {
+    if (t.done || !t.due || t.due > to) continue;
+    const s = t.due < from ? from : t.due;
+    (todoByDay[s] = todoByDay[s] || []).push(t);
+  }
+  const days = [...new Set([...Object.keys(byDay), ...Object.keys(todoByDay)])].sort();
   let html = `<div class="ag-toolbar"><span class="muted small">今日から60日間</span><button class="btn primary" data-add="${from}">＋ 予定</button></div>`;
   if (!days.length) html += '<p class="empty">これからの予定はありません</p>';
   for (const s of days) {
     const d = parseYmd(s);
     const hol = JPHolidays.get(s);
-    const list = byDay[s].sort((x, y) => ((x.ev.time || '') + x.ev.title).localeCompare((y.ev.time || '') + y.ev.title));
+    const list = (byDay[s] || []).sort((x, y) => ((x.ev.time || '') + x.ev.title).localeCompare((y.ev.time || '') + y.ev.title));
+    const tds = (todoByDay[s] || []).sort(todoSort);
     html += `<div class="ag-day" data-date="${s}">
       <div class="ag-head${d.getDay() === 0 || hol ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getMonth() + 1}/${d.getDate()}</b> ${WD[d.getDay()]}${s === from ? ' <span class="today-badge">今日</span>' : ''}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}</div>
-      <ul class="event-list">${list.map(o => eventRow(o)).join('')}</ul>
+      ${list.length ? `<ul class="event-list">${list.map(o => eventRow(o)).join('')}</ul>` : ''}
+      ${tds.length ? `<ul class="todo-list compact">${tds.map(t => todoRow(t, { hideDue: t.due === s })).join('')}</ul>` : ''}
     </div>`;
   }
   $('#listView').innerHTML = html;
@@ -264,6 +283,10 @@ function renderDay() {
   $('#eventList').innerHTML = occ.length
     ? occ.map(o => eventRow(o)).join('')
     : '<li class="empty" style="cursor:default">予定はありません</li>';
+
+  const todos = todosForDay(selected);
+  $('#dayTodosWrap').hidden = !todos.length;
+  $('#dayTodos').innerHTML = todos.map(t => todoRow(t, { hideDue: t.due === selected })).join('');
 
   const habits = activeHabits();
   $('#habitChecks').innerHTML = habits.length
@@ -400,7 +423,9 @@ function renderCategories() {
 function render() {
   if (currentView === 'calendar') renderCalendar();
   else if (currentView === 'habits') renderHabits();
+  else if (currentView === 'todos') renderTodos();
   else { $('#monthTitle').textContent = '設定'; renderCategories(); }
+  updateTodoBadge();
   const showNav = currentView === 'habits' || (currentView === 'calendar' && calMode !== 'list');
   $('#prevMonth').style.visibility = showNav ? '' : 'hidden';
   $('#nextMonth').style.visibility = showNav ? '' : 'hidden';
@@ -646,6 +671,7 @@ $('#grid').addEventListener('click', e => {
 // 予定の行・日付・＋ボタン（日パネル・週・リスト共通）
 for (const el of [$('#eventList'), $('#weekView'), $('#listView')]) {
   el.addEventListener('click', e => {
+    if (el !== $('#eventList') && onTodoClick(e)) return;
     const add = e.target.closest('[data-add]');
     if (add) { openEvent(null, null, add.dataset.add); return; }
     const li = e.target.closest('li[data-id]');
@@ -751,6 +777,149 @@ $('#hDelete').addEventListener('click', () => {
   toast('習慣を削除しました');
 });
 
+/* ========== ToDo ========== */
+const activeTodos = () => data.todos.filter(t => !t.deleted);
+const todoById = id => data.todos.find(t => t.id === id && !t.deleted);
+let showDoneTodos = false;
+let editingTodo = null;
+
+function dueLabel(due) {
+  const today = todayStr();
+  if (!due) return '';
+  if (due === today) return '今日';
+  if (due === addDaysStr(today, 1)) return '明日';
+  if (due === addDaysStr(today, -1)) return '昨日';
+  return mdw(due);
+}
+function todoRow(t, { hideDue = false } = {}) {
+  const overdue = !t.done && t.due && t.due < todayStr();
+  return `<li class="todo${t.done ? ' done' : ''}" data-todo="${esc(t.id)}">
+    <input type="checkbox" class="check" data-todo-check="${esc(t.id)}" ${t.done ? 'checked' : ''} aria-label="${esc(t.title)}を完了">
+    <span class="ttitle">${t.star ? '<span class="star">★</span>' : ''}${esc(t.title)}${t.memo ? `<span class="memo">${esc(t.memo)}</span>` : ''}</span>
+    ${t.due && !hideDue ? `<span class="tdue${overdue ? ' overdue' : ''}">${esc(dueLabel(t.due))}</span>` : ''}
+  </li>`;
+}
+const todoSort = (a, b) => (b.star ? 1 : 0) - (a.star ? 1 : 0) ||
+  (a.due || '9999').localeCompare(b.due || '9999') || (a.createdAt || 0) - (b.createdAt || 0);
+// その日の画面に出すToDo（今日なら期限切れも含める）
+function todosForDay(s) {
+  const today = todayStr();
+  return activeTodos().filter(t => t.due && (t.due === s || (s === today && !t.done && t.due < today))).sort(todoSort);
+}
+
+function renderTodos() {
+  $('#monthTitle').textContent = 'ToDo';
+  const today = todayStr();
+  const all = activeTodos();
+  const open = all.filter(t => !t.done).sort(todoSort);
+  const groups = [
+    ['期限切れ', open.filter(t => t.due && t.due < today), 'overdue'],
+    ['今日', open.filter(t => t.due === today), ''],
+    ['これから', open.filter(t => t.due && t.due > today), ''],
+    ['期限なし', open.filter(t => !t.due), ''],
+  ];
+  let html = '';
+  for (const [name, list, cls] of groups) {
+    if (!list.length) continue;
+    html += `<div class="card todo-group ${cls}"><h3>${name}<span class="count">${list.length}</span></h3>
+      <ul class="todo-list">${list.map(t => todoRow(t, { hideDue: name === '今日' })).join('')}</ul></div>`;
+  }
+  if (!open.length) html += '<p class="empty center">やることはありません 🎉<br>上の欄から追加できます</p>';
+  const done = all.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+  if (done.length) {
+    html += `<div class="card todo-group donegrp"><h3>
+      <button class="link-btn" id="toggleDone">${showDoneTodos ? '▾' : '▸'} 完了 <span class="count">${done.length}</span></button>
+      ${showDoneTodos ? '<button class="btn small" id="clearDone">完了したものを削除</button>' : ''}</h3>
+      ${showDoneTodos ? `<ul class="todo-list">${done.map(t => todoRow(t)).join('')}</ul>` : ''}</div>`;
+  }
+  $('#todoGroups').innerHTML = html;
+}
+function updateTodoBadge() {
+  const today = todayStr();
+  const n = activeTodos().filter(t => !t.done && t.due && t.due <= today).length;
+  const b = $('#todoBadge');
+  b.hidden = !n;
+  b.textContent = n > 99 ? '99+' : String(n);
+}
+function toggleTodo(id) {
+  const t = todoById(id);
+  if (!t) return;
+  t.done = !t.done;
+  t.doneAt = t.done ? Date.now() : null;
+  t.updatedAt = Date.now();
+  save();
+  if (t.done) toast(`「${t.title}」完了！`);
+}
+
+$('#todoQuick').addEventListener('submit', e => {
+  e.preventDefault();
+  const title = $('#todoQuickTitle').value.trim();
+  if (!title) return;
+  const now = Date.now();
+  data.todos.push({ id: uid(), title: title.slice(0, 80), due: $('#todoQuickDue').value || '', memo: '', star: false, done: false, createdAt: now, updatedAt: now });
+  save();
+  $('#todoQuickTitle').value = '';
+  render();
+  $('#todoQuickTitle').focus(); // 続けて入力できるように
+});
+
+const tdlg = $('#todoDialog');
+function openTodo(id) {
+  const t = todoById(id);
+  if (!t) return;
+  editingTodo = t.id;
+  $('#tTitle').value = t.title;
+  $('#tDue').value = t.due || '';
+  $('#tStar').checked = !!t.star;
+  $('#tMemo').value = t.memo || '';
+  tdlg.showModal();
+}
+$('#todoEditForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const t = todoById(editingTodo);
+  const title = $('#tTitle').value.trim();
+  if (!t || !title) return;
+  Object.assign(t, { title: title.slice(0, 80), due: $('#tDue').value || '', star: $('#tStar').checked, memo: $('#tMemo').value.trim(), updatedAt: Date.now() });
+  save();
+  tdlg.close();
+  render();
+  toast('ToDoを更新しました');
+});
+$('#tDelete').addEventListener('click', () => {
+  const t = todoById(editingTodo);
+  if (!t || !confirm(`「${t.title}」を削除しますか？`)) return;
+  data.todos = data.todos.map(x => x.id === t.id ? { id: t.id, deleted: true, updatedAt: Date.now() } : x);
+  save();
+  tdlg.close();
+  render();
+  toast('ToDoを削除しました');
+});
+$('#tCancel').addEventListener('click', () => tdlg.close());
+tdlg.addEventListener('click', e => { if (e.target === tdlg) tdlg.close(); });
+
+// ToDoの行：チェックで完了、それ以外をタップで編集（ToDoタブ・日パネル・週・リスト共通）
+function onTodoClick(e) {
+  const chk = e.target.closest('[data-todo-check]');
+  if (chk) { toggleTodo(chk.dataset.todoCheck); render(); return true; }
+  const row = e.target.closest('li[data-todo]');
+  if (row) { openTodo(row.dataset.todo); return true; }
+  return false;
+}
+$('#todoGroups').addEventListener('click', e => {
+  if (e.target.closest('#toggleDone')) { showDoneTodos = !showDoneTodos; renderTodos(); return; }
+  if (e.target.closest('#clearDone')) {
+    const done = activeTodos().filter(t => t.done);
+    if (!confirm(`完了したToDo ${done.length}件を削除しますか？`)) return;
+    const now = Date.now();
+    const ids = new Set(done.map(t => t.id));
+    data.todos = data.todos.map(x => ids.has(x.id) ? { id: x.id, deleted: true, updatedAt: now } : x);
+    save(); render();
+    return;
+  }
+  onTodoClick(e);
+});
+$('#dayTodos').addEventListener('click', onTodoClick);
+
 /* ========== カテゴリの操作 ========== */
 $('#catForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -826,6 +995,7 @@ $('#resetBtn').addEventListener('click', () => {
   const now = Date.now();
   data.events = data.events.map(x => ({ id: x.id, deleted: true, updatedAt: now }));
   data.habits = data.habits.map(x => ({ id: x.id, deleted: true, updatedAt: now }));
+  data.todos = data.todos.map(x => ({ id: x.id, deleted: true, updatedAt: now }));
   for (const k of Object.keys(data.marks)) data.marks[k] = { on: false, t: now };
   save(); render();
   toast('すべて削除しました');
@@ -837,7 +1007,7 @@ window.App = {
   replaceData(d) {
     data = normalize(d);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
-    if (!dlg.open && !$('#scopeDialog').open && !hdlg.open) render();
+    if (!dlg.open && !$('#scopeDialog').open && !hdlg.open && !tdlg.open) render();
   },
   mergeData,
   normalize,
@@ -882,7 +1052,7 @@ const Updater = (() => {
       // 公開直後は配信サーバーの反映待ちで古い版が返ることがある。直前に更新したばかりなら繰り返さない
       const last = Number(s(() => sessionStorage.getItem(FLAG))) || 0;
       if (!manual && Date.now() - last < 5 * 60 * 1000) return;
-      if ((dlg.open || $('#scopeDialog').open || $('#habitDialog').open) && !manual) return; // 編集中は待つ
+      if ((dlg.open || $('#scopeDialog').open || $('#habitDialog').open || $('#todoDialog').open) && !manual) return; // 編集中は待つ
       toast('新しいバージョンに更新しています…');
       setTimeout(apply, 700);
     } catch {

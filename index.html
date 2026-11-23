@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="9">
+  <meta name="app-version" content="10">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -48,9 +48,23 @@
           <button class="btn primary" id="addEvent">＋ 予定</button>
         </div>
         <ul class="event-list" id="eventList"></ul>
+        <div id="dayTodosWrap" hidden>
+          <h3 class="sub">ToDo（この日まで）</h3>
+          <ul class="todo-list" id="dayTodos"></ul>
+        </div>
         <h3 class="sub">習慣</h3>
         <ul class="habit-checks" id="habitChecks"></ul>
       </div>
+    </section>
+
+    <!-- ToDo -->
+    <section class="view" id="view-todos" hidden>
+      <form id="todoQuick" class="quick-add">
+        <input id="todoQuickTitle" type="text" maxlength="80" placeholder="やることを入力して Enter" autocomplete="off">
+        <input id="todoQuickDue" type="date" aria-label="期限">
+        <button class="btn primary" type="submit">追加</button>
+      </form>
+      <div id="todoGroups"></div>
     </section>
 
     <!-- 習慣 -->
@@ -145,6 +159,7 @@
   <nav class="tabbar">
     <button class="tab active" data-view="calendar"><span class="tab-ico">📅</span>カレンダー</button>
     <button class="tab" data-view="habits"><span class="tab-ico">✅</span>習慣</button>
+    <button class="tab" data-view="todos"><span class="tab-ico">📝</span>ToDo<span class="tab-badge" id="todoBadge" hidden></span></button>
     <button class="tab" data-view="settings"><span class="tab-ico">⚙️</span>設定</button>
   </nav>
 
@@ -198,6 +213,24 @@
         <span class="spacer"></span>
         <button class="btn" value="cancel" type="button" id="evCancel">キャンセル</button>
         <button class="btn primary" value="save" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="todoDialog">
+    <form method="dialog" id="todoEditForm">
+      <h3>ToDoを編集</h3>
+      <label>やること<input id="tTitle" type="text" maxlength="80" required></label>
+      <div class="row">
+        <label>期限<input id="tDue" type="date"></label>
+        <label class="check-row"><input id="tStar" type="checkbox"> ★ 重要</label>
+      </div>
+      <label>メモ<textarea id="tMemo" rows="3" maxlength="500"></textarea></label>
+      <div class="row end">
+        <button class="btn danger" id="tDelete" type="button">削除</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="tCancel">キャンセル</button>
+        <button class="btn primary" type="submit">保存</button>
       </div>
     </form>
   </dialog>

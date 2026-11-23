@@ -218,8 +218,13 @@ function view(data) {
     .sort((a, b) => a.sort.localeCompare(b.sort));
   const upcoming = all.filter(o => o.start >= tomorrow).map(o => toItem(o, o.start))
     .sort((a, b) => (a.date + a.sort).localeCompare(b.date + b.sort));
+  // 今日までが期限の、まだ終わっていないToDo（重要なもの→期限が早いもの順）
+  const todos = (data.todos || [])
+    .filter(t => !t.deleted && !t.done && t.title && t.due && t.due <= today)
+    .sort((a, b) => (b.star ? 1 : 0) - (a.star ? 1 : 0) || a.due.localeCompare(b.due))
+    .map(t => ({ title: (t.star ? '★' : '') + t.title, overdue: t.due < today }));
   return {
-    today, todayEvents, upcoming,
+    today, todayEvents, upcoming, todos,
     habits: habitItems(habits, marks, today, on, streak),
   };
 }
@@ -266,7 +271,21 @@ function events(stack, list, max, size, withDate, emptyMsg) {
 }
 function habitSummary(v) {
   const done = v.habits.filter(h => h.done).length;
-  return v.habits.length ? `習慣 ${done}/${v.habits.length}` : '';
+  const parts = [];
+  if (v.habits.length) parts.push(`習慣 ${done}/${v.habits.length}`);
+  if (v.todos && v.todos.length) parts.push(`ToDo ${v.todos.length}`);
+  return parts.join('  ');
+}
+function todoLines(stack, v, max, size) {
+  v.todos.slice(0, max).forEach((t, i) => {
+    if (i) stack.addSpacer(2);
+    const row = stack.addStack();
+    row.centerAlignContent();
+    text(row, '☐', size, t.overdue ? COL.red : COL.muted, true);
+    row.addSpacer(5);
+    text(row, t.title, size, t.overdue ? COL.red : COL.text);
+  });
+  if (v.todos.length > max) { stack.addSpacer(2); text(stack, `ほか${v.todos.length - max}件`, size * 0.8, COL.muted); }
 }
 
 function build(v, stale) {
@@ -307,10 +326,15 @@ function build(v, stale) {
     w.addSpacer(8);
     text(w, 'これから（7日間）', 11, COL.muted, true); w.addSpacer(3);
     events(w, v.upcoming, 5, 13, true, '予定なし');
+    if (v.todos.length) {
+      w.addSpacer(8);
+      text(w, 'ToDo（今日まで）', 11, COL.muted, true); w.addSpacer(3);
+      todoLines(w, v, 3, 13);
+    }
     if (v.habits.length) {
       w.addSpacer(8);
       text(w, '今日の習慣', 11, COL.muted, true); w.addSpacer(3);
-      v.habits.slice(0, 6).forEach((h, i) => { if (i) w.addSpacer(2); habitLine(w, h, 13); });
+      v.habits.slice(0, v.todos.length ? 4 : 6).forEach((h, i) => { if (i) w.addSpacer(2); habitLine(w, h, 13); });
     }
     w.addSpacer();
   } else {
@@ -320,7 +344,8 @@ function build(v, stale) {
     header(left, 20);
     left.addSpacer(6);
     if (v.todayEvents.length) events(left, v.todayEvents, 3, 12, false, '');
-    else { text(left, '今日の予定なし', 12, COL.muted); left.addSpacer(4); events(left, v.upcoming, 2, 11, true, ''); }
+    else { text(left, '今日の予定なし', 12, COL.muted); left.addSpacer(4); events(left, v.upcoming, v.todos.length ? 1 : 2, 11, true, ''); }
+    if (v.todos.length) { left.addSpacer(4); todoLines(left, v, v.todayEvents.length >= 2 ? 1 : 2, 11); }
     left.addSpacer();
     row.addSpacer();
     if (v.habits.length) {
