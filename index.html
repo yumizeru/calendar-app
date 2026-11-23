@@ -79,6 +79,15 @@
           </div>
         </div>
       </div>
+      <div class="card" id="pushCard" hidden>
+        <h3>リマインダー通知</h3>
+        <p class="muted" id="pushStatus"></p>
+        <div class="row">
+          <button class="btn primary" id="pushEnable" hidden>通知をオンにする</button>
+          <button class="btn" id="pushTest" hidden>テスト通知を送る</button>
+          <button class="btn" id="pushDisable" hidden>オフにする</button>
+        </div>
+      </div>
       <div class="card">
         <h3>バックアップ</h3>
         <p class="muted">データはこの端末に保存されます（ログイン中はクラウドにも保存）。念のため、ときどき書き出しておくと安心です。</p>
@@ -123,7 +132,7 @@
           <option value="60">1時間前</option>
           <option value="1440">前日の同じ時刻</option>
         </select>
-        <small class="hint">時刻なし（終日）の予定は当日9:00が基準です。通知が届くのはクラウド同期の設定後です。</small>
+        <small class="hint">時刻なし（終日）の予定は当日9:00が基準です。通知には「設定」でのログインと通知オンが必要です。</small>
       </label>
       <label>メモ<textarea id="evMemo" rows="3" maxlength="500"></textarea></label>
       <div class="row end">
@@ -141,5 +150,6 @@
   <script src="holidays.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
+  <script src="push.js"></script>
 </body>
 </html>

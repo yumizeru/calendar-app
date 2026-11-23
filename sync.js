@@ -57,6 +57,7 @@ const Cloud = (() => {
       $('#loginForm').hidden = false;
     }
     document.body.classList.toggle('signed-in', !!session);
+    document.dispatchEvent(new CustomEvent('hibilog:auth'));
   }
 
   /* ---------- ログイン ---------- */
@@ -73,6 +74,8 @@ const Cloud = (() => {
     session = data.session;
   }
   async function signOut() {
+    // この端末への通知も止める（ログアウト後に他人の予定が届かないように）
+    if (window.Push) await window.Push.disable().catch(() => {});
     await client.auth.signOut().catch(() => {});
     session = null;
     try { localStorage.removeItem(LAST_SYNC_KEY); } catch {}
