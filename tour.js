@@ -1,7 +1,8 @@
 'use strict';
 /* =====================================================================
- * 使い方ガイド（チュートリアル）
- *  ・初めて開いたときに1回だけ自動で表示。設定からいつでも見直せる
+ * 使い方ガイド（画面を照らして案内する）
+ *  ・はじめてガイド：初めて開いたときに1回だけ自動で表示
+ *  ・テーマ別ガイド（共有など）：「使い方・ヘルプ」から呼び出す
  *  ・案内する場所だけを明るくし、吹き出しで説明する
  * ===================================================================== */
 const Tour = (() => {
@@ -10,9 +11,12 @@ const Tour = (() => {
   const tab = v => document.querySelector(`.tab[data-view="${v}"]`);
   const goTab = v => { const t = tab(v); if (t && !t.classList.contains('active')) t.click(); window.scrollTo(0, 0); };
   const goMonth = () => { goTab('calendar'); const b = document.querySelector('.seg-btn[data-mode="month"]'); if (b) b.click(); };
+  const loggedIn = () => typeof Cloud !== 'undefined' && !!Cloud.session;
+  const openDetails = sel => { const d = $(sel); if (d) d.open = true; return d; };
+  const settingsAt = sel => () => { goTab('settings'); const el = $(sel); if (el) el.scrollIntoView({ block: 'center' }); };
 
-  // 案内の中身。target が null の回は画面の真ん中に吹き出しだけを出す
-  const STEPS = [
+  /* ---------- はじめてガイド ---------- */
+  const MAIN = [
     {
       target: null,
       title: 'ひびログへようこそ',
@@ -66,16 +70,86 @@ const Tour = (() => {
       target: '#cloudCard',
       title: 'スマホとパソコンで同じデータを',
       text: 'ここでログインすると、ほかの端末と同じ予定を見られます。\n通知・ウィジェット・家族との共有カレンダーにも、ログインが必要です。',
-      before: () => { goTab('settings'); const c = $('#cloudCard'); if (c) c.scrollIntoView({ block: 'center' }); },
+      before: settingsAt('#cloudCard'),
+    },
+    {
+      target: () => (loggedIn() ? '#sharedCard' : null),
+      title: '家族や友人と予定を共有',
+      text: '「共有カレンダー」を作って招待すると、家族の予定をみんなで見たり書いたりできます。\n手順が少し多いので、専用の案内を用意しています。',
+      before: () => { if (loggedIn()) settingsAt('#sharedCard')(); else goTab('settings'); },
+      action: { label: '共有のしかたを案内してもらう', run: () => start('shared') },
+    },
+    {
+      target: '#helpCard',
+      title: '困ったときは「使い方・ヘルプ」',
+      text: 'テーマごとの説明が、いつでも読めます。\nこのガイドも、ここからもう一度見られます。',
+      before: settingsAt('#helpCard'),
+    },
+  ];
+
+  /* ---------- 共有のしかた ---------- */
+  const SHARED = [
+    {
+      target: null,
+      title: '家族や友人と予定を共有する',
+      text: '流れは3つだけです。\n① 1人が「共有カレンダー」を作る\n② 招待コードを送り、相手が参加する\n③ 予定を作るときに、そのカレンダーを選ぶ\n\n共有されるのは、共有カレンダーに入れた予定だけです。自分の予定・習慣・ToDoは相手に見えません。',
+      before: () => goTab('settings'),
+    },
+    {
+      target: () => (loggedIn() ? null : '#cloudCard'),
+      title: 'はじめに：全員ログインが必要です',
+      text: '共有するには、あなたも相手も、それぞれのスマホでログイン（はじめての人は「新規登録」）しておく必要があります。\nログインは「設定」の「クラウド同期」からできます。',
+      before: settingsAt('#cloudCard'),
+      skipIf: loggedIn,
+    },
+    {
+      target: () => (loggedIn() ? '#shName' : null),
+      title: 'あなたの表示名',
+      text: '相手の画面に出る名前です（例：ママ、パパ、おばあちゃん）。\n「だれが予定を変えたか」の表示にも使われます。',
+      before: settingsAt('#sharedCard'),
+    },
+    {
+      target: () => (loggedIn() ? '.sh-details:first-of-type' : null),
+      title: '① 共有カレンダーを作る（1人だけ）',
+      text: '「新しく作る」をタップして、名前（例：家族）と色を決め、「作成」を押します。\n作るのは1人だけで大丈夫です。',
+      before: () => { settingsAt('#sharedCard')(); openDetails('#sharedCard .sh-details'); },
+    },
+    {
+      target: () => (loggedIn() && $('[data-sh-invite]') ? '[data-sh-invite]' : null),
+      title: '② 相手を招待する',
+      text: '作ったカレンダーの「招待する」を押すと、アプリのURLと10文字の招待コードが入った文章を、LINEやメールで送れます。',
+      before: settingsAt('#sharedList'),
+    },
+    {
+      target: () => (loggedIn() ? '#shJoin' : null),
+      title: '②′ 招待された人は',
+      text: '届いたURLを開いてログインしたら、「設定」→「共有カレンダー」→「招待コードで参加」に、10文字のコードを入力して「参加」を押します。',
+      before: () => { settingsAt('#sharedCard')(); const ds = document.querySelectorAll('#sharedCard .sh-details'); if (ds[1]) { ds[1].open = true; ds[1].scrollIntoView({ block: 'center' }); } },
+    },
+    {
+      target: '#addEvent',
+      title: '③ 予定を共有に入れる',
+      text: '予定を作る画面に「カレンダー」という欄が出ます。そこで「👥 家族」のような共有カレンダーを選ぶと、全員に共有されます。\n「自分だけ」を選べば、これまでどおり自分だけの予定です。',
+      before: goMonth,
     },
     {
       target: null,
-      title: '準備ができました！',
-      text: 'このガイドは「設定」の下の方にある「使い方ガイドを見る」から、いつでも見直せます。',
+      title: '共有した予定の見え方',
+      text: '共有の予定には「👥 家族」の印が付き、カレンダーの色で表示されます。\n予定を開くと「最後に変更した人」がわかります。\n通知（リマインダー）は、メンバー全員に届きます。',
+      before: goMonth,
+    },
+    {
+      target: null,
+      title: 'うまくいかないときは',
+      text: '・相手の予定が出ない → 相手のアプリを一度閉じて開き直す（変更は1分ごとに取り込みます）\n・「招待コードが見つかりません」→ コードを見直す。作った人が「コードを作り直す」と前のコードは使えません\n・やめたいとき → 「退出」。作った人は「削除」（全員から消えます）',
       before: goMonth,
     },
   ];
 
+  const TOURS = { main: MAIN, shared: SHARED };
+
+  let steps = MAIN;
+  let tourName = 'main';
   let i = 0;
   let root = null;
 
@@ -98,12 +172,12 @@ const Tour = (() => {
         </div>
       </div>`;
     document.body.appendChild(root);
-    root.querySelector('#tourNext').addEventListener('click', () => go(i + 1));
-    root.querySelector('#tourBack').addEventListener('click', () => go(i - 1));
+    root.querySelector('#tourNext').addEventListener('click', () => go(i + 1, 1));
+    root.querySelector('#tourBack').addEventListener('click', () => go(i - 1, -1));
     root.querySelector('#tourSkip').addEventListener('click', finish);
     root.querySelector('#tourAction').addEventListener('click', () => {
-      const a = STEPS[i].action;
-      if (a) { a.run(); place(); }
+      const a = steps[i].action;
+      if (a) { a.run(); if (root) place(); }
     });
     // 案内中は後ろの画面を触れないようにする（吹き出しのボタンだけ使える）
     root.querySelector('.tour-shade').addEventListener('click', e => e.stopPropagation());
@@ -113,8 +187,8 @@ const Tour = (() => {
   function onKey(e) {
     if (!root) return;
     if (e.key === 'Escape') finish();
-    if (e.key === 'ArrowRight') go(i + 1);
-    if (e.key === 'ArrowLeft') go(i - 1);
+    if (e.key === 'ArrowRight') go(i + 1, 1);
+    if (e.key === 'ArrowLeft') go(i - 1, -1);
   }
 
   function targetEl(step) {
@@ -126,7 +200,7 @@ const Tour = (() => {
   // 明るくする枠と吹き出しの位置を決める
   function place() {
     if (!root) return;
-    const step = STEPS[i];
+    const step = steps[i];
     const hole = root.querySelector('.tour-hole');
     const card = root.querySelector('.tour-card');
     const el = targetEl(step);
@@ -160,39 +234,50 @@ const Tour = (() => {
     }
   }
 
-  function go(n) {
+  // dir：進む向き（飛ばすステップがあるとき、その向きに飛ばす）
+  function go(n, dir = 1) {
+    while (n >= 0 && n < steps.length && steps[n].skipIf && steps[n].skipIf()) n += dir;
     if (n < 0) return;
-    if (n >= STEPS.length) { finish(); return; }
+    if (n >= steps.length) { finish(); return; }
     i = n;
-    const step = STEPS[i];
+    const step = steps[i];
     if (step.before) step.before();
-    root.querySelector('#tourStep').textContent = `${i + 1} / ${STEPS.length}`;
+    root.querySelector('#tourStep').textContent = `${i + 1} / ${steps.length}`;
     root.querySelector('#tourTitle').textContent = step.title;
     root.querySelector('#tourText').textContent = step.text;
     const act = root.querySelector('#tourAction');
     act.hidden = !step.action;
     if (step.action) act.textContent = step.action.label;
     root.querySelector('#tourBack').style.visibility = i === 0 ? 'hidden' : '';
-    root.querySelector('#tourNext').textContent = i === STEPS.length - 1 ? 'はじめる' : 'つぎへ';
+    root.querySelector('#tourNext').textContent = i === steps.length - 1 ? (tourName === 'main' ? 'はじめる' : 'おわる') : 'つぎへ';
+    root.querySelector('.tour-card').scrollTop = 0;
     const el = targetEl(step);
     if (el && !el.closest('.tabbar')) el.scrollIntoView({ block: 'center' });
-    // 画面の切り替えや移動が終わってから位置を合わせる
+    // すぐ位置を合わせ、画面の切り替えや移動が終わったあとにもう一度合わせ直す
+    place();
     requestAnimationFrame(() => requestAnimationFrame(place));
+    setTimeout(place, 250);
     root.querySelector('#tourNext').focus({ preventScroll: true });
   }
 
-  function start() {
-    if (root) return;
-    for (const d of document.querySelectorAll('dialog[open]')) d.close();
-    build();
-    go(0);
-  }
-  function finish() {
-    try { localStorage.setItem(DONE_KEY, '1'); } catch {}
+  function teardown() {
     window.removeEventListener('resize', place);
     document.removeEventListener('keydown', onKey);
     if (root) root.remove();
     root = null;
+  }
+  // name：'main'（はじめてガイド） / 'shared'（共有のしかた）
+  function start(name = 'main') {
+    if (root) teardown(); // 案内の途中から別の案内に切り替える
+    for (const d of document.querySelectorAll('dialog[open]')) d.close();
+    tourName = TOURS[name] ? name : 'main';
+    steps = TOURS[tourName];
+    build();
+    go(0);
+  }
+  function finish() {
+    if (tourName === 'main') { try { localStorage.setItem(DONE_KEY, '1'); } catch {} }
+    teardown();
     goMonth();
   }
 
@@ -200,11 +285,9 @@ const Tour = (() => {
   function maybeStart() {
     let done = false;
     try { done = !!localStorage.getItem(DONE_KEY); } catch { done = true; }
-    if (!done) setTimeout(start, 600);
+    if (!done) setTimeout(() => { if (!root) start('main'); }, 600);
   }
 
-  const btn = $('#tourStart');
-  if (btn) btn.addEventListener('click', start);
   maybeStart();
-  return { start, get active() { return !!root; } };
+  return { start, has: name => !!TOURS[name], get active() { return !!root; } };
 })();
