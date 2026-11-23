@@ -1,6 +1,6 @@
 // オフラインでも開けるようにファイルをキャッシュする
-// ファイルを更新したら VERSION を上げてください
-const VERSION = 'hibilog-v5';
+// 更新するときは index.html の app-version と version.json も同じ番号にそろえる
+const VERSION = 'hibilog-v6';
 const SUPABASE_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js';
 const FILES = [
   './',
@@ -20,7 +20,12 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache:'reload' で、ブラウザに残った古いコピーではなく必ずサーバーから取る
+  e.waitUntil(
+    caches.open(VERSION)
+      .then(c => c.addAll(FILES.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -38,6 +43,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   const isOwn = url.origin === self.location.origin;
   if (!isOwn && req.url !== SUPABASE_LIB) return;
+  // 版の確認は常にサーバーに聞く（キャッシュしない）
+  if (isOwn && url.pathname.endsWith('/version.json')) return;
 
   // ライブラリはバージョン固定なのでキャッシュ優先
   if (req.url === SUPABASE_LIB) {
@@ -45,8 +52,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   // 自分のファイルはネット優先、つながらなければキャッシュ
+  // cache:'no-cache' = ブラウザの一時保存を使う前に、サーバーに「変わった？」と必ず確認する
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })
       .then(res => {
         if (res.ok) {
           const copy = res.clone();

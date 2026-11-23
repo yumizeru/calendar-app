@@ -409,11 +409,75 @@ window.App = {
   render,
 };
 
+/* =====================================================================
+ * 自動更新
+ *  ホーム画面のアプリは閉じても裏で生きていることが多く、古い版のまま動き続ける。
+ *  そこで、開いたとき・前面に戻ったときに version.json を確認し、
+ *  新しい版があればキャッシュを消して読み込み直す。
+ * ===================================================================== */
+const Updater = (() => {
+  const meta = document.querySelector('meta[name="app-version"]');
+  const LOADED = meta ? meta.content : '0';
+  const FLAG = 'hibilog:updatedAt';
+  let reg = null;
+  let busy = false;
+
+  const s = (fn) => { try { return fn(); } catch { return null; } };
+  async function latest() {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return String((await r.json()).version);
+  }
+
+  async function apply() {
+    busy = true;
+    s(() => sessionStorage.setItem(FLAG, String(Date.now())));
+    try { if (reg) await reg.update(); } catch {}
+    try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch {}
+    location.reload();
+  }
+
+  async function check(manual) {
+    if (busy || location.protocol === 'file:') return;
+    try {
+      const v = await latest();
+      if (v === LOADED) { if (manual) toast('最新版です'); return; }
+      // 公開直後は配信サーバーの反映待ちで古い版が返ることがある。直前に更新したばかりなら繰り返さない
+      const last = Number(s(() => sessionStorage.getItem(FLAG))) || 0;
+      if (!manual && Date.now() - last < 5 * 60 * 1000) return;
+      if (dlg.open && !manual) return; // 予定の編集中は待つ
+      toast('新しいバージョンに更新しています…');
+      setTimeout(apply, 700);
+    } catch {
+      if (manual) toast('確認できませんでした（オフラインかもしれません）');
+    }
+  }
+
+  function start() {
+    $('#appVersion').textContent = LOADED;
+    $('#checkUpdate').addEventListener('click', () => check(true));
+    const last = Number(s(() => sessionStorage.getItem(FLAG))) || 0;
+    if (Date.now() - last < 30 * 1000) {
+      setTimeout(() => toast(`バージョン ${LOADED} に更新しました`), 400);
+    }
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then(r => { reg = r; })
+        .catch(() => {});
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      if (reg) reg.update().catch(() => {});
+      check(false);
+    });
+    window.addEventListener('pageshow', e => { if (e.persisted) check(false); });
+    check(false);
+  }
+  return { start, check, get version() { return LOADED; } };
+})();
+
 /* ========== 起動 ========== */
 render();
 // 日付が変わったら「今日」表示を更新
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !dlg.open) render(); });
-
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
+Updater.start();

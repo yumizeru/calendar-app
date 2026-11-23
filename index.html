@@ -9,6 +9,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
+  <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
+  <meta name="app-version" content="6">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -109,6 +111,11 @@
       <div class="card">
         <h3>iPhoneのホーム画面に追加</h3>
         <p class="muted">Safariでこのページを開き、共有ボタン →「ホーム画面に追加」でアプリのように使えます。</p>
+      </div>
+      <div class="card">
+        <h3>アプリのバージョン</h3>
+        <p class="muted">バージョン <b id="appVersion"></b>。新しい版が出ると、アプリを開いたときに自動で更新されます。</p>
+        <button class="btn" id="checkUpdate">今すぐ更新を確認</button>
       </div>
       <div class="card danger-zone">
         <h3>すべて削除</h3>
