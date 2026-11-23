@@ -285,12 +285,14 @@ dialog label.color-field { flex: 0 0 64px; }
 dialog label.color-field input { height: 42px; padding: 2px; }
 
 /* ToDo */
-.quick-add { display: flex; gap: 6px; margin: 4px 0 12px; }
+.quick-add { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 12px; }
 .quick-add input[type=text] {
-  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 1rem;
+  width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 1rem;
 }
-.quick-add input[type=date] {
-  width: 128px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: .8rem;
+.quick-row { display: flex; align-items: center; gap: 8px; }
+.quick-due { flex: 1; display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); }
+.quick-due input {
+  flex: 1; min-width: 0; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: .85rem;
 }
 .todo-group h3 { display: flex; align-items: center; gap: 8px; font-size: .9rem; margin: 0 0 4px; }
 .todo-group.overdue h3 { color: var(--danger); }

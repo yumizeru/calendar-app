@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="10">
+  <meta name="app-version" content="11">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -60,9 +60,11 @@
     <!-- ToDo -->
     <section class="view" id="view-todos" hidden>
       <form id="todoQuick" class="quick-add">
-        <input id="todoQuickTitle" type="text" maxlength="80" placeholder="やることを入力して Enter" autocomplete="off">
-        <input id="todoQuickDue" type="date" aria-label="期限">
-        <button class="btn primary" type="submit">追加</button>
+        <input id="todoQuickTitle" type="text" maxlength="80" placeholder="やることを追加…" autocomplete="off" enterkeyhint="done">
+        <div class="quick-row">
+          <label class="quick-due">期限<input id="todoQuickDue" type="date" aria-label="期限（なくてもOK）"></label>
+          <button class="btn primary" type="submit">追加</button>
+        </div>
       </form>
       <div id="todoGroups"></div>
     </section>
