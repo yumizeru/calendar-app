@@ -55,9 +55,33 @@
 
     <!-- 設定 -->
     <section class="view" id="view-settings" hidden>
+      <div class="card" id="cloudCard">
+        <h3>クラウド同期</h3>
+        <div id="cloudOut">
+          <p class="muted">ログインすると、iPhoneとPCなど複数の端末で同じデータを使えます。リマインダー通知やウィジェットにもログインが必要です。</p>
+          <p class="muted" id="cloudUnavailable" hidden>同期機能を読み込めませんでした。ネットにつながった状態でアプリを開き直してください。</p>
+          <form id="loginForm" class="stack">
+            <input id="loginEmail" type="email" inputmode="email" autocomplete="username" placeholder="メールアドレス" required>
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="パスワード（8文字以上）" minlength="8" required>
+            <div class="row">
+              <button class="btn" type="submit" data-mode="signup">新規登録</button>
+              <button class="btn primary" type="submit" data-mode="login">ログイン</button>
+            </div>
+            <p class="muted small">はじめての人は「新規登録」、2台目以降の端末では同じメールアドレスとパスワードで「ログイン」してください。パスワードは忘れないようにメモしておいてください。</p>
+          </form>
+        </div>
+        <div id="cloudIn" hidden>
+          <p class="muted"><b id="accountEmail"></b> でログイン中</p>
+          <p class="sync-status" id="syncStatus"></p>
+          <div class="row">
+            <button class="btn" id="syncNow">今すぐ同期</button>
+            <button class="btn" id="logoutBtn">ログアウト</button>
+          </div>
+        </div>
+      </div>
       <div class="card">
         <h3>バックアップ</h3>
-        <p class="muted">データはこの端末のブラウザ内だけに保存されます。機種変更や別の端末に移すときは書き出してください。</p>
+        <p class="muted">データはこの端末に保存されます（ログイン中はクラウドにも保存）。念のため、ときどき書き出しておくと安心です。</p>
         <div class="row">
           <button class="btn" id="exportBtn">書き出す</button>
           <label class="btn">読み込む<input type="file" id="importFile" accept="application/json,.json" hidden></label>
@@ -89,6 +113,18 @@
         <label>日付<input id="evDate" type="date" required></label>
         <label>時刻<input id="evTime" type="time"></label>
       </div>
+      <label>リマインダー
+        <select id="evRemind">
+          <option value="">なし</option>
+          <option value="0">予定の時刻</option>
+          <option value="5">5分前</option>
+          <option value="10">10分前</option>
+          <option value="30">30分前</option>
+          <option value="60">1時間前</option>
+          <option value="1440">前日の同じ時刻</option>
+        </select>
+        <small class="hint">時刻なし（終日）の予定は当日9:00が基準です。通知が届くのはクラウド同期の設定後です。</small>
+      </label>
       <label>メモ<textarea id="evMemo" rows="3" maxlength="500"></textarea></label>
       <div class="row end">
         <button class="btn danger" id="evDelete" type="button">削除</button>
@@ -101,6 +137,9 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+  <script src="holidays.js"></script>
   <script src="app.js"></script>
+  <script src="sync.js"></script>
 </body>
 </html>
