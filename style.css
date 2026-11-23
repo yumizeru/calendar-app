@@ -238,6 +238,52 @@ dialog label.check-row input { width: auto; }
 }
 .wd-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 
+/* 習慣：日パネル */
+.habit-checks li.not-due { opacity: .55; }
+.habit-checks .hname { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hint-chip { font-size: .68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+.num-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
+.dot.big { width: 12px; height: 12px; flex: none; margin: 0 6px; }
+.num-input {
+  width: 72px; padding: 6px 8px; border-radius: 8px; border: 2px solid var(--c, var(--accent));
+  background: var(--bg); font-size: 1rem; text-align: right;
+}
+.num-input.done { background: var(--c, var(--accent)); color: #fff; }
+.num-row .unit { font-size: .8rem; color: var(--muted); min-width: 3.5em; }
+
+/* 習慣：タブ */
+.habit-top .tags { display: block; font-size: .72rem; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.week button.rest { opacity: .4; }
+.week button.part { background: color-mix(in srgb, var(--c) 35%, var(--surface-2)); color: var(--text); }
+.stats-toggle {
+  width: 100%; margin-top: 10px; border: 0; background: none; color: var(--accent);
+  font-size: .8rem; font-weight: 600; cursor: pointer; padding: 6px 0 0;
+}
+.hstats { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+.hstats-head { font-size: .8rem; color: var(--muted); margin: 6px 0; }
+.hstats-head b { color: var(--text); }
+.hm-wrap { overflow-x: auto; }
+.hm-months, .hm-grid { display: grid; grid-template-columns: repeat(53, minmax(4px, 1fr)); column-gap: 1.5px; }
+.hm-months { font-size: .55rem; color: var(--muted); height: 12px; }
+.hm-months span { white-space: nowrap; }
+.hm-grid { grid-auto-flow: column; grid-template-rows: repeat(7, auto); row-gap: 1.5px; }
+.hm { display: block; aspect-ratio: 1; border-radius: 1.5px; background: var(--surface-2); }
+.hm.lx { background: transparent; outline: 1px solid var(--border); outline-offset: -1px; }
+.hm.future { background: transparent; }
+.hm.l1 { background: color-mix(in srgb, var(--c, var(--accent)) 30%, var(--surface-2)); }
+.hm.l2 { background: color-mix(in srgb, var(--c, var(--accent)) 55%, var(--surface-2)); }
+.hm.l3 { background: color-mix(in srgb, var(--c, var(--accent)) 78%, var(--surface-2)); }
+.hm.l4 { background: var(--c, var(--accent)); }
+.hm-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; font-size: .65rem; color: var(--muted); margin-top: 4px; }
+.hm-legend .hm { width: 9px; }
+.bars { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 110px; align-items: end; }
+.bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bar i { display: block; width: 100%; max-width: 18px; background: var(--c, var(--accent)); border-radius: 3px 3px 0 0; min-height: 1px; }
+.bar .pct { font-size: .55rem; color: var(--muted); }
+.bar .mon { font-size: .6rem; color: var(--muted); margin-top: 2px; }
+dialog label.color-field { flex: 0 0 64px; }
+dialog label.color-field input { height: 42px; padding: 2px; }
+
 /* カテゴリ（設定） */
 .cat-list { list-style: none; margin: 0 0 10px; padding: 0; }
 .cat-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }

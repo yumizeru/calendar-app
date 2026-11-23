@@ -158,6 +158,39 @@ function timeOf(o, day) {
   return ev.time ? ev.time : '終日';
 }
 
+/* ---------- アプリと同じ計算（core.js）を読み込む。取れなければ前回の保存分、それもなければ簡易版 ---------- */
+let CoreLib = null;
+async function loadCore() {
+  const P = fm.joinPath(fm.documentsDirectory(), 'hibilog-core.js');
+  let src = null;
+  try {
+    const r = new Request(C.appUrl + 'core.js?t=' + Date.now());
+    r.timeoutInterval = 10;
+    const t = await r.loadString();
+    if (r.response.statusCode === 200 && t.includes('const Core')) { src = t; fm.writeString(P, t); }
+  } catch (e) {}
+  if (!src && fm.fileExists(P)) src = fm.readString(P);
+  if (!src) return null;
+  try { return new Function(src.replace(/if \(typeof module[^\n]*/, '') + '\nreturn Core;')(); } catch (e) { return null; }
+}
+
+function habitItems(habits, marks, today, on, legacyStreak) {
+  const K = CoreLib;
+  if (!K) return habits.map(h => ({ name: h.name, color: h.color || '#4f7cff', done: on(today, h.id), streak: legacyStreak(h.id), unit: '日' }));
+  return habits.filter(h => K.isDue(h, today)).map(h => {
+    const st = K.streak(h, marks, today);
+    const num = K.isNumeric(h);
+    const v = num ? K.valueOn(h, marks, today) : null;
+    const weekly = K.freqOf(h).type === 'weekly' ? ` ${K.weekCount(h, marks, today)}/${K.weekNeed(h)}` : '';
+    return {
+      name: h.name + (num ? ` ${K.fmtNum(v || 0)}/${K.fmtNum(h.target.value)}${h.target.unit || ''}` : '') + weekly,
+      color: h.color || '#4f7cff',
+      done: K.doneOn(h, marks, today) || (weekly && K.weekCount(h, marks, today) >= K.weekNeed(h)),
+      streak: st.n, unit: st.unit,
+    };
+  });
+}
+
 function view(data) {
   const today = ymd(new Date());
   const events = (data.events || []).filter(e => !e.deleted && e.date && e.title);
@@ -187,7 +220,7 @@ function view(data) {
     .sort((a, b) => (a.date + a.sort).localeCompare(b.date + b.sort));
   return {
     today, todayEvents, upcoming,
-    habits: habits.map(h => ({ name: h.name, color: h.color || '#4f7cff', done: on(today, h.id), streak: streak(h.id) })),
+    habits: habitItems(habits, marks, today, on, streak),
   };
 }
 
@@ -224,7 +257,7 @@ function habitLine(stack, h, size) {
   text(row, h.done ? '●' : '○', size, new Color(h.color), true);
   row.addSpacer(5);
   text(row, h.name, size, h.done ? COL.muted : COL.text);
-  if (h.streak > 0) { row.addSpacer(4); text(row, `${h.streak}日`, size * 0.8, COL.muted); }
+  if (h.streak > 0) { row.addSpacer(4); text(row, `${h.streak}${h.unit || '日'}`, size * 0.8, COL.muted); }
 }
 function events(stack, list, max, size, withDate, emptyMsg) {
   if (!list.length) { text(stack, emptyMsg, size, COL.muted); return; }
@@ -321,6 +354,7 @@ if (!C) {
 } else {
   try {
     const r = await loadData();
+    CoreLib = await loadCore();
     widget = r.data ? build(view(r.data), r.stale) : message('合言葉が無効です。アプリの「設定」からスクリプトをコピーし直してください。');
   } catch (e) {
     widget = message('読み込めませんでした。ネット接続を確認してください。');

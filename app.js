@@ -34,7 +34,11 @@ function normalize(d) {
     .map(h => ({ ...h, updatedAt: num(h.updatedAt) }));
   if (d.marks && typeof d.marks === 'object') {
     for (const [k, v] of Object.entries(d.marks)) {
-      if (v && typeof v === 'object') out.marks[k] = { on: !!v.on, t: num(v.t) };
+      if (v && typeof v === 'object') {
+        const mk = { on: !!v.on, t: num(v.t) };
+        if (v.v != null && isFinite(Number(v.v))) mk.v = Number(v.v); // 数値の記録
+        out.marks[k] = mk;
+      }
     }
   }
   // 旧形式（version 1）の checks: { date: [habitId] } を変換
@@ -114,29 +118,37 @@ let editing = null; // { id, occStart, recurring }
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* ========== 習慣の計算 ========== */
-const isChecked = (date, hid) => !!(data.marks[`${date}|${hid}`] || {}).on;
+/* ========== 習慣の記録 ========== */
+const habitById = id => data.habits.find(h => h.id === id && !h.deleted);
+const isDoneOn = (h, s) => Core.doneOn(h, data.marks, s);
 function toggleCheck(date, hid) {
-  data.marks[`${date}|${hid}`] = { on: !isChecked(date, hid), t: Date.now() };
+  const m = Core.markOf(data.marks, date, hid);
+  data.marks[`${date}|${hid}`] = { on: !(m && m.on), t: Date.now() };
   save();
 }
-function streak(hid) {
-  // 今日が未チェックなら昨日から数える（今日はまだこれから、という扱い）
-  let d = new Date();
-  if (!isChecked(ymd(d), hid)) d = addDays(d, -1);
-  let n = 0;
-  while (isChecked(ymd(d), hid)) { n++; d = addDays(d, -1); }
-  return n;
+function setValue(date, h, v) {
+  const num = v === '' || v == null ? null : Number(v);
+  if (num != null && !isFinite(num)) return;
+  data.marks[`${date}|${h.id}`] = { on: num != null && num >= Number(h.target.value), v: num, t: Date.now() };
+  save();
 }
-function monthRate(hid, month) {
+// 数値の習慣は入力欄、チェックの習慣は切り替え
+function recordHabit(h, date) {
+  if (Core.isNumeric(h)) {
+    const cur = Core.valueOn(h, data.marks, date);
+    const v = prompt(`${h.name}（${mdw(date)}）\n記録する数値（目標 ${Core.fmtNum(h.target.value)}${h.target.unit || ''}）。空欄で記録を消します`, cur == null ? '' : String(cur));
+    if (v === null) return;
+    setValue(date, h, v.trim());
+  } else {
+    toggleCheck(date, h.id);
+  }
+}
+function monthRate(h, month) {
   const y = month.getFullYear(), m = month.getMonth();
-  const last = new Date(y, m + 1, 0).getDate();
-  const today = new Date();
-  const isCur = y === today.getFullYear() && m === today.getMonth();
-  const days = isCur ? today.getDate() : last;
-  let done = 0;
-  for (let i = 1; i <= days; i++) if (isChecked(`${y}-${pad(m + 1)}-${pad(i)}`, hid)) done++;
-  return { done, days, pct: days ? Math.round(done / days * 100) : 0 };
+  const from = `${y}-${pad(m + 1)}-01`;
+  const last = ymd(new Date(y, m + 1, 0));
+  const today = todayStr();
+  return Core.rate(h, data.marks, from, last < today ? last : today);
 }
 
 /* ========== 予定の行（日パネル・週・リストで共通） ========== */
@@ -185,7 +197,7 @@ function renderMonth() {
     const evs = byDay[s] || [];
     const evDots = evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
       (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '');
-    const hDots = habits.filter(h => isChecked(s, h.id))
+    const hDots = habits.filter(h => isDoneOn(h, s))
       .map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
     const hl = hol ? `<span class="hol-name">${esc(hol)}</span>` : '';
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
@@ -255,10 +267,29 @@ function renderDay() {
 
   const habits = activeHabits();
   $('#habitChecks').innerHTML = habits.length
-    ? habits.map(h => `<li><label>
-        <input type="checkbox" class="check" data-hid="${esc(h.id)}" style="--c:${esc(h.color)}" ${isChecked(selected, h.id) ? 'checked' : ''}>
-        <span>${esc(h.name)}</span></label></li>`).join('')
+    ? habits.map(h => habitDayRow(h, selected)).join('')
     : '<li class="empty">「習慣」タブから習慣を追加できます</li>';
+}
+
+// 日パネルの習慣1行
+function habitDayRow(h, s) {
+  const due = Core.isDue(h, s);
+  const done = isDoneOn(h, s);
+  const weekly = Core.freqOf(h).type === 'weekly'
+    ? `<span class="hint-chip">今週 ${Core.weekCount(h, data.marks, s)}/${Core.weekNeed(h)}回</span>` : '';
+  const rest = due ? '' : '<span class="hint-chip">お休みの日</span>';
+  if (Core.isNumeric(h)) {
+    const v = Core.valueOn(h, data.marks, s);
+    return `<li class="${due ? '' : 'not-due'}"><div class="num-row">
+      <span class="dot big" style="background:${esc(h.color)}"></span>
+      <span class="hname">${esc(h.name)}${weekly}${rest}</span>
+      <input class="num-input${done ? ' done' : ''}" type="number" inputmode="decimal" step="any" min="0" data-num="${esc(h.id)}" value="${v == null ? '' : esc(v)}" placeholder="0" style="--c:${esc(h.color)}" aria-label="${esc(h.name)}の記録">
+      <span class="unit">/ ${esc(Core.fmtNum(h.target.value))}${esc(h.target.unit || '')}</span>
+    </div></li>`;
+  }
+  return `<li class="${due ? '' : 'not-due'}"><label>
+    <input type="checkbox" class="check" data-hid="${esc(h.id)}" style="--c:${esc(h.color)}" ${done ? 'checked' : ''}>
+    <span class="hname">${esc(h.name)}${weekly}${rest}</span></label></li>`;
 }
 
 function renderCalendar() {
@@ -277,34 +308,82 @@ function renderCalendar() {
 function renderHabits() {
   const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
   $('#monthTitle').textContent = `${y}年${m + 1}月`;
-  const today = new Date();
-  const week = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
+  const today = todayStr();
+  const week = Array.from({ length: 7 }, (_, i) => addDaysStr(today, i - 6));
   const habits = activeHabits();
 
   $('#habitList').innerHTML = habits.length
     ? habits.map(h => {
-        const r = monthRate(h.id, viewMonth);
-        const cells = week.map(d => {
-          const s = ymd(d);
-          return `<button class="${isChecked(s, h.id) ? 'on' : ''}" data-hid="${esc(h.id)}" data-date="${s}" style="--c:${esc(h.color)}" aria-label="${d.getMonth() + 1}月${d.getDate()}日">
-            ${WD[d.getDay()]}<b>${d.getDate()}</b></button>`;
+        const r = monthRate(h, viewMonth);
+        const st = Core.streak(h, data.marks, today);
+        const num = Core.isNumeric(h);
+        const cells = week.map(s => {
+          const d = parseYmd(s);
+          const v = num ? Core.valueOn(h, data.marks, s) : null;
+          const cls = [isDoneOn(h, s) ? 'on' : '', Core.isDue(h, s) ? '' : 'rest', v != null && !isDoneOn(h, s) ? 'part' : ''].join(' ');
+          return `<button class="${cls}" data-hid="${esc(h.id)}" data-date="${s}" style="--c:${esc(h.color)}" aria-label="${d.getMonth() + 1}月${d.getDate()}日">
+            ${WD[d.getDay()]}<b>${num && v != null ? esc(Core.fmtNum(v)) : d.getDate()}</b></button>`;
         }).join('');
+        const tags = [Core.freqLabel(h)];
+        if (num) tags.push(`目標 ${Core.fmtNum(h.target.value)}${h.target.unit || ''}`);
+        if (h.remindAt) tags.push(`🔔 ${h.remindAt}`);
+        const weekly = Core.freqOf(h).type === 'weekly';
+        const open = openHabitStats.has(h.id);
         return `<li>
           <div class="habit-top">
             <span class="dot" style="background:${esc(h.color)};width:12px;height:12px"></span>
-            <span class="name">${esc(h.name)}</span>
-            <button class="btn small" data-rename="${esc(h.id)}">名前変更</button>
-            <button class="btn small danger" data-del="${esc(h.id)}">削除</button>
+            <span class="name">${esc(h.name)}<span class="tags">${tags.map(esc).join(' ・ ')}</span></span>
+            <button class="btn small" data-edit="${esc(h.id)}">編集</button>
           </div>
           <div class="habit-stats">
-            <div><b>${streak(h.id)}日</b>連続</div>
+            <div><b>${st.n}${st.unit}</b>連続</div>
             <div><b>${r.pct}%</b>${m + 1}月の達成率</div>
-            <div><b>${r.done}/${r.days}</b>日</div>
+            ${weekly
+              ? `<div><b>${Core.weekCount(h, data.marks, today)}/${Core.weekNeed(h)}</b>今週の回数</div>`
+              : `<div><b>${r.done}/${r.total}</b>日</div>`}
           </div>
           <div class="week">${cells}</div>
+          <button class="stats-toggle" data-stats="${esc(h.id)}">${open ? '振り返りを閉じる ▴' : '振り返り（1年・月ごと） ▾'}</button>
+          ${open ? habitStatsHtml(h) : ''}
         </li>`;
       }).join('')
-    : '<li class="empty">まだ習慣がありません。上のフォームから追加してください。</li>';
+    : '<li class="empty">まだ習慣がありません。「＋ 習慣を追加」から作ってください。</li>';
+}
+
+const openHabitStats = new Set();
+// 振り返り：1年分のヒートマップと、12か月の達成率
+function habitStatsHtml(h) {
+  const today = todayStr();
+  const end = addDaysStr(Core.weekStart(today), 6);          // 今週の土曜まで
+  const start = addDaysStr(Core.weekStart(today), -52 * 7);  // 53週ぶん
+  let cells = '';
+  const monthLabels = [];
+  for (let w = 0; w < 53; w++) {
+    const ws = addDaysStr(start, w * 7);
+    const d = parseYmd(ws);
+    if (d.getDate() <= 7) monthLabels.push(`<span style="grid-column:${w + 1}">${d.getMonth() + 1}月</span>`);
+    for (let i = 0; i < 7; i++) {
+      const s = addDaysStr(ws, i);
+      if (s > today) { cells += '<i class="hm future"></i>'; continue; }
+      const lv = Core.level(h, data.marks, s);
+      cells += `<i class="hm l${lv < 0 ? 'x' : lv}" title="${s}"></i>`;
+    }
+  }
+  const bars = [];
+  const now = parseYmd(today);
+  for (let k = 11; k >= 0; k--) {
+    const r = monthRate(h, new Date(now.getFullYear(), now.getMonth() - k, 1));
+    const mm = new Date(now.getFullYear(), now.getMonth() - k, 1).getMonth() + 1;
+    bars.push(`<div class="bar" title="${mm}月 ${r.pct}%"><span class="pct">${r.total ? r.pct : ''}</span><i style="height:${r.pct}%"></i><span class="mon">${mm}</span></div>`);
+  }
+  const y = Core.rate(h, data.marks, addDaysStr(today, -364), today);
+  return `<div class="hstats" style="--c:${esc(h.color)}">
+    <div class="hstats-head">この1年：達成率 <b>${y.pct}%</b>（${y.done}/${y.total}）</div>
+    <div class="hm-wrap"><div class="hm-months">${monthLabels.join('')}</div><div class="hm-grid">${cells}</div></div>
+    <div class="hm-legend">少 <i class="hm l0"></i><i class="hm l1"></i><i class="hm l2"></i><i class="hm l3"></i><i class="hm l4"></i> 多</div>
+    <div class="hstats-head">月ごとの達成率（%）</div>
+    <div class="bars">${bars.join('')}</div>
+  </div>`;
 }
 
 /* ========== 描画：カテゴリ（設定） ========== */
@@ -578,35 +657,98 @@ for (const el of [$('#eventList'), $('#weekView'), $('#listView')]) {
 $('#addEvent').addEventListener('click', () => openEvent());
 $('#habitChecks').addEventListener('change', e => {
   const hid = e.target.dataset.hid;
-  if (hid) { toggleCheck(selected, hid); renderCalendar(); }
+  if (hid) { toggleCheck(selected, hid); renderCalendar(); return; }
+  const nid = e.target.dataset.num;
+  const h = nid && habitById(nid);
+  if (h) { setValue(selected, h, e.target.value.trim()); renderCalendar(); }
 });
 
-$('#habitForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const name = $('#habitName').value.trim();
-  if (!name) return;
-  data.habits.push({ id: uid(), name, color: $('#habitColor').value, createdAt: todayStr(), updatedAt: Date.now() });
-  save();
-  $('#habitName').value = '';
-  renderHabits();
-  toast('習慣を追加しました');
-});
 $('#habitList').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.del) {
-    const h = data.habits.find(x => x.id === b.dataset.del);
-    if (!h || !confirm(`「${h.name}」とその記録を削除しますか？`)) return;
-    data.habits = data.habits.map(x => x.id === h.id ? { id: h.id, deleted: true, updatedAt: Date.now() } : x);
-    save(); renderHabits(); toast('習慣を削除しました');
-  } else if (b.dataset.rename) {
-    const h = data.habits.find(x => x.id === b.dataset.rename);
-    const name = h && prompt('新しい名前', h.name);
-    if (name && name.trim()) { h.name = name.trim().slice(0, 30); h.updatedAt = Date.now(); save(); renderHabits(); }
-  } else if (b.dataset.hid && b.dataset.date) {
-    toggleCheck(b.dataset.date, b.dataset.hid);
+  if (b.dataset.edit) { openHabit(b.dataset.edit); return; }
+  if (b.dataset.stats) {
+    const id = b.dataset.stats;
+    if (openHabitStats.has(id)) openHabitStats.delete(id); else openHabitStats.add(id);
     renderHabits();
+    return;
   }
+  if (b.dataset.hid && b.dataset.date) {
+    const h = habitById(b.dataset.hid);
+    if (h) { recordHabit(h, b.dataset.date); renderHabits(); }
+  }
+});
+
+/* ========== 習慣ダイアログ ========== */
+const hdlg = $('#habitDialog');
+let editingHabit = null;
+const hChosenDays = () => [...document.querySelectorAll('#hDays button.on')].map(b => Number(b.dataset.wd));
+function syncHabitUi() {
+  const f = $('#hFreq').value;
+  $('#hDays').hidden = f !== 'weekdays';
+  $('#hTimesRow').hidden = f !== 'weekly';
+  $('#hTargetRow').hidden = $('#hKind').value !== 'number';
+}
+function openHabit(id) {
+  const h = id ? habitById(id) : null;
+  editingHabit = h ? h.id : null;
+  const f = Core.freqOf(h);
+  $('#habitDialogTitle').textContent = h ? '習慣を編集' : '習慣を追加';
+  $('#hName').value = h ? h.name : '';
+  $('#hColor').value = h ? h.color : '#4f7cff';
+  $('#hFreq').value = f.type;
+  const days = f.type === 'weekdays' && f.days ? f.days : [1, 2, 3, 4, 5];
+  document.querySelectorAll('#hDays button').forEach(b => b.classList.toggle('on', days.includes(Number(b.dataset.wd))));
+  $('#hTimes').value = String(f.times || 3);
+  $('#hKind').value = Core.isNumeric(h) ? 'number' : 'check';
+  $('#hTarget').value = Core.isNumeric(h) ? h.target.value : '';
+  $('#hUnit').value = Core.isNumeric(h) ? (h.target.unit || '') : '';
+  $('#hRemind').value = h && h.remindAt ? h.remindAt : '';
+  $('#hDelete').hidden = !h;
+  syncHabitUi();
+  hdlg.showModal();
+  setTimeout(() => { if (!h) $('#hName').focus(); }, 50);
+}
+$('#addHabit').addEventListener('click', () => openHabit());
+$('#hFreq').addEventListener('change', syncHabitUi);
+$('#hKind').addEventListener('change', syncHabitUi);
+$('#hDays').addEventListener('click', e => { const b = e.target.closest('button[data-wd]'); if (b) b.classList.toggle('on'); });
+$('#hCancel').addEventListener('click', () => hdlg.close());
+hdlg.addEventListener('click', e => { if (e.target === hdlg) hdlg.close(); });
+$('#habitEditForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#hName').value.trim();
+  if (!name) { toast('名前を入れてください'); return; }
+  const type = $('#hFreq').value;
+  const freq = { type };
+  if (type === 'weekdays') {
+    freq.days = hChosenDays();
+    if (!freq.days.length) { toast('曜日を1つ以上選んでください'); return; }
+  }
+  if (type === 'weekly') freq.times = Number($('#hTimes').value) || 1;
+  let target = null;
+  if ($('#hKind').value === 'number') {
+    const v = Number($('#hTarget').value);
+    if (!(v > 0)) { toast('1日の目標を数字で入れてください（例：2）'); return; }
+    target = { value: v, unit: $('#hUnit').value.trim().slice(0, 8) };
+  }
+  const fields = { name: name.slice(0, 30), color: $('#hColor').value, freq, target, remindAt: $('#hRemind').value || '', updatedAt: Date.now() };
+  if (editingHabit) Object.assign(habitById(editingHabit), fields);
+  else data.habits.push({ id: uid(), createdAt: todayStr(), ...fields });
+  save();
+  const was = !!editingHabit;
+  hdlg.close();
+  render();
+  toast(was ? '習慣を更新しました' : '習慣を追加しました');
+});
+$('#hDelete').addEventListener('click', () => {
+  const h = editingHabit && habitById(editingHabit);
+  if (!h || !confirm(`「${h.name}」とその記録を削除しますか？`)) return;
+  data.habits = data.habits.map(x => x.id === h.id ? { id: h.id, deleted: true, updatedAt: Date.now() } : x);
+  save();
+  hdlg.close();
+  render();
+  toast('習慣を削除しました');
 });
 
 /* ========== カテゴリの操作 ========== */
@@ -695,7 +837,7 @@ window.App = {
   replaceData(d) {
     data = normalize(d);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
-    if (!dlg.open && !$('#scopeDialog').open) render();
+    if (!dlg.open && !$('#scopeDialog').open && !hdlg.open) render();
   },
   mergeData,
   normalize,
@@ -740,7 +882,7 @@ const Updater = (() => {
       // 公開直後は配信サーバーの反映待ちで古い版が返ることがある。直前に更新したばかりなら繰り返さない
       const last = Number(s(() => sessionStorage.getItem(FLAG))) || 0;
       if (!manual && Date.now() - last < 5 * 60 * 1000) return;
-      if ((dlg.open || $('#scopeDialog').open) && !manual) return; // 予定の編集中は待つ
+      if ((dlg.open || $('#scopeDialog').open || $('#habitDialog').open) && !manual) return; // 編集中は待つ
       toast('新しいバージョンに更新しています…');
       setTimeout(apply, 700);
     } catch {

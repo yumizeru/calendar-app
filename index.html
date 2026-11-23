@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="8">
+  <meta name="app-version" content="9">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -55,12 +55,9 @@
 
     <!-- 習慣 -->
     <section class="view" id="view-habits" hidden>
-      <div class="card">
-        <form id="habitForm" class="habit-form">
-          <input id="habitName" type="text" placeholder="新しい習慣（例：読書 10分）" maxlength="30" required>
-          <input id="habitColor" type="color" value="#4f7cff" aria-label="色">
-          <button class="btn primary" type="submit">追加</button>
-        </form>
+      <div class="ag-toolbar">
+        <span class="muted small">上の ‹ › で達成率の月を切り替え</span>
+        <button class="btn primary" id="addHabit">＋ 習慣を追加</button>
       </div>
       <ul class="habit-list" id="habitList"></ul>
     </section>
@@ -201,6 +198,52 @@
         <span class="spacer"></span>
         <button class="btn" value="cancel" type="button" id="evCancel">キャンセル</button>
         <button class="btn primary" value="save" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="habitDialog">
+    <form method="dialog" id="habitEditForm">
+      <h3 id="habitDialogTitle">習慣</h3>
+      <div class="row">
+        <label>名前<input id="hName" type="text" maxlength="30" placeholder="例：読書" required></label>
+        <label class="color-field">色<input id="hColor" type="color" value="#4f7cff"></label>
+      </div>
+      <label>頻度
+        <select id="hFreq">
+          <option value="daily">毎日</option>
+          <option value="weekdays">曜日を選ぶ</option>
+          <option value="weekly">週に◯回（曜日は自由）</option>
+        </select>
+      </label>
+      <div class="wd-chips" id="hDays" hidden>
+        <button type="button" data-wd="0">日</button><button type="button" data-wd="1">月</button><button type="button" data-wd="2">火</button><button type="button" data-wd="3">水</button><button type="button" data-wd="4">木</button><button type="button" data-wd="5">金</button><button type="button" data-wd="6">土</button>
+      </div>
+      <label id="hTimesRow" hidden>1週間の目標回数
+        <select id="hTimes">
+          <option value="1">1回</option><option value="2">2回</option><option value="3">3回</option>
+          <option value="4">4回</option><option value="5">5回</option><option value="6">6回</option>
+        </select>
+      </label>
+      <label>記録のしかた
+        <select id="hKind">
+          <option value="check">できた／できない（チェック）</option>
+          <option value="number">数値で記録（例：水 2L）</option>
+        </select>
+      </label>
+      <div class="row" id="hTargetRow" hidden>
+        <label>1日の目標<input id="hTarget" type="number" inputmode="decimal" min="0" step="any" placeholder="例：2"></label>
+        <label>単位<input id="hUnit" type="text" maxlength="8" placeholder="例：L・回・分"></label>
+      </div>
+      <label>リマインダー（毎日この時刻に通知）
+        <input id="hRemind" type="time">
+        <small class="hint">空欄なら通知なし。その日まだ達成していないときだけ届きます。</small>
+      </label>
+      <div class="row end">
+        <button class="btn danger" id="hDelete" type="button">削除</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="hCancel">キャンセル</button>
+        <button class="btn primary" type="submit">保存</button>
       </div>
     </form>
   </dialog>

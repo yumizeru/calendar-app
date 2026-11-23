@@ -76,16 +76,77 @@ async function runDue() {
   if (error) throw error;
   if (!due?.length) return { due: 0, sent: 0 };
 
-  const subs = await subsFor([...new Set(due.map((r) => r.user_id))]);
-  let sent = 0;
+  const userIds = [...new Set(due.map((r) => r.user_id))];
+  const subs = await subsFor(userIds);
+
+  // 習慣の通知は、送る直前に最新の記録を見て「もう達成済み」なら送らない
+  const dataByUser = new Map<string, UserData>();
+  if (due.some((r) => r.event_id.startsWith('habit:'))) {
+    const { data: rows } = await db.from('user_data').select('user_id,data').in('user_id', userIds);
+    for (const row of rows ?? []) dataByUser.set(row.user_id, row.data as UserData);
+  }
+
+  let sent = 0, skipped = 0;
   const errors: string[] = [];
   for (const r of due) {
+    let title = `🔔 ${r.title}`, body = r.body;
+    if (r.event_id.startsWith('habit:')) {
+      const status = habitStatus(dataByUser.get(r.user_id), r.event_id);
+      if (!status || status.done) { skipped++; continue; }
+      title = r.title;
+      if (status.weekly) body = status.weekly;
+    }
     const mine = subs.filter((s) => s.user_id === r.user_id);
-    const res = await sendTo(mine, { title: `🔔 ${r.title}`, body: r.body, tag: r.event_id, url: APP_URL });
+    const res = await sendTo(mine, { title, body, tag: r.event_id, url: APP_URL });
     sent += res.ok;
     errors.push(...res.errors);
   }
-  return { due: due.length, sent, errors: errors.slice(0, 5) };
+  return { due: due.length, sent, skipped, errors: errors.slice(0, 5) };
+}
+
+/* ---------- 習慣の達成判定（アプリの core.js と同じ考え方） ---------- */
+type Mark = { on?: boolean; v?: number | null };
+type Habit = {
+  id: string; deleted?: boolean;
+  freq?: { type?: string; days?: number[]; times?: number };
+  target?: { value?: number } | null;
+};
+type UserData = { habits?: Habit[]; marks?: Record<string, Mark> };
+
+function addDaysStr(s: string, n: number) {
+  const [y, m, d] = s.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
+function weekday(s: string) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+function habitStatus(data: UserData | undefined, eventId: string) {
+  // eventId = "habit:<habitId>@<YYYY-MM-DD>"
+  const m = eventId.match(/^habit:(.+)@(\d{4}-\d{2}-\d{2})$/);
+  if (!data || !m) return null;
+  const [, hid, date] = m;
+  const h = (data.habits ?? []).find((x) => x.id === hid);
+  if (!h || h.deleted) return { done: true }; // 消した習慣は送らない
+  const marks = data.marks ?? {};
+  const target = Number(h.target?.value) || 0;
+  const doneOn = (s: string) => {
+    const mk = marks[`${s}|${hid}`];
+    if (!mk) return false;
+    return target > 0 ? (Number(mk.v) || 0) >= target : !!mk.on;
+  };
+  if (doneOn(date)) return { done: true };
+  if (h.freq?.type === 'weekdays' && !(h.freq.days ?? []).includes(weekday(date))) return { done: true };
+  if (h.freq?.type === 'weekly') {
+    const need = Math.max(1, Number(h.freq.times) || 1);
+    const ws = addDaysStr(date, -weekday(date));
+    let n = 0;
+    for (let i = 0; i < 7; i++) if (doneOn(addDaysStr(ws, i))) n++;
+    if (n >= need) return { done: true };
+    return { done: false, weekly: `今週 ${n}/${need}回` };
+  }
+  return { done: false };
 }
 
 Deno.serve(async (req) => {

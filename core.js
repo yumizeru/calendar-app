@@ -120,6 +120,118 @@ const Core = (() => {
     return r.until ? `${s}（${Number(r.until.slice(5, 7))}/${Number(r.until.slice(8))}まで）` : s;
   }
 
-  return { pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD, matches, expand, onDay, timeLabel, repeatLabel, duration };
+  /* ===================================================================
+   * 習慣
+   *  habit: { id, name, color, createdAt,
+   *           freq: { type: 'daily'|'weekdays'|'weekly', days: [0-6], times: N },
+   *           target: null | { value, unit },   // 数値で記録する習慣
+   *           remindAt: '' | 'HH:MM' }
+   *  marks: { "YYYY-MM-DD|habitId": { on, v, t } }   v は数値の記録
+   * =================================================================== */
+  const freqOf = h => (h && h.freq && h.freq.type ? h.freq : { type: 'daily' });
+  const isNumeric = h => !!(h && h.target && Number(h.target.value) > 0);
+  const weekStart = s => { const d = parseYmd(s); return ymd(addDays(d, -d.getDay())); };
+
+  // その日は「やる日」か（曜日指定のときだけ休みの日がある）
+  function isDue(h, s) {
+    const f = freqOf(h);
+    if (f.type === 'weekdays') return (f.days || []).includes(parseYmd(s).getDay());
+    return true;
+  }
+  const markOf = (marks, s, hid) => (marks && marks[`${s}|${hid}`]) || null;
+  function isDoneMark(h, m) {
+    if (!m) return false;
+    if (isNumeric(h)) return (Number(m.v) || 0) >= Number(h.target.value);
+    return !!m.on;
+  }
+  const doneOn = (h, marks, s) => isDoneMark(h, markOf(marks, s, h.id));
+  const valueOn = (h, marks, s) => { const m = markOf(marks, s, h.id); return m && m.v != null ? Number(m.v) : null; };
+
+  function weekCount(h, marks, s) {
+    const ws = weekStart(s);
+    let n = 0;
+    for (let i = 0; i < 7; i++) if (doneOn(h, marks, addDaysStr(ws, i))) n++;
+    return n;
+  }
+  const weekNeed = h => Math.max(1, Number(freqOf(h).times) || 1);
+
+  // 連続記録。週N回の習慣は「達成した週」を数える
+  function streak(h, marks, today) {
+    if (freqOf(h).type === 'weekly') {
+      const need = weekNeed(h);
+      let ws = weekStart(today);
+      if (weekCount(h, marks, ws) < need) ws = addDaysStr(ws, -7); // 今週はまだ途中
+      let n = 0;
+      while (n < 520 && weekCount(h, marks, ws) >= need) { n++; ws = addDaysStr(ws, -7); }
+      return { n, unit: '週' };
+    }
+    let s = today;
+    if (!doneOn(h, marks, s)) s = addDaysStr(s, -1); // 今日はまだこれから
+    let n = 0;
+    for (let g = 0; g < 3660; g++, s = addDaysStr(s, -1)) {
+      if (!isDue(h, s)) continue; // 休みの日は飛ばす
+      if (doneOn(h, marks, s)) n++; else break;
+    }
+    return { n, unit: '日' };
+  }
+
+  // 最初に記録した日（作成日より前の記録がある場合のため）
+  function firstMark(h, marks) {
+    let first = null;
+    const suffix = `|${h.id}`;
+    for (const k in marks || {}) {
+      if (k.endsWith(suffix)) { const s = k.slice(0, 10); if (!first || s < first) first = s; }
+    }
+    return first;
+  }
+
+  // from〜to の達成率（習慣を始める前の期間は数えない）
+  function rate(h, marks, from, to) {
+    let begin = h.createdAt || null;
+    const fm = firstMark(h, marks);
+    if (fm && (!begin || fm < begin)) begin = fm;
+    if (begin && from < begin) from = begin;
+    if (from > to) return { done: 0, total: 0, pct: 0 };
+    if (freqOf(h).type === 'weekly') {
+      const need = weekNeed(h);
+      let done = 0, total = 0;
+      for (let ws = weekStart(from); ws <= to; ws = addDaysStr(ws, 7)) {
+        done += Math.min(weekCount(h, marks, ws), need);
+        total += need;
+      }
+      return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
+    }
+    let done = 0, total = 0;
+    for (let s = from; s <= to; s = addDaysStr(s, 1)) {
+      if (!isDue(h, s)) continue;
+      total++;
+      if (doneOn(h, marks, s)) done++;
+    }
+    return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
+  }
+
+  // ヒートマップの濃さ（-1 = 休みの日, 0〜4）
+  function level(h, marks, s) {
+    if (isNumeric(h)) {
+      const v = valueOn(h, marks, s);
+      if (!v) return isDue(h, s) ? 0 : -1;
+      return Math.max(1, Math.min(4, Math.ceil(v / Number(h.target.value) * 4)));
+    }
+    if (doneOn(h, marks, s)) return 4;
+    return isDue(h, s) ? 0 : -1;
+  }
+
+  function freqLabel(h) {
+    const f = freqOf(h);
+    if (f.type === 'weekdays') return (f.days || []).slice().sort().map(i => WD[i]).join('・') || '曜日未設定';
+    if (f.type === 'weekly') return `週${weekNeed(h)}回`;
+    return '毎日';
+  }
+  const fmtNum = v => (Math.round(Number(v) * 100) / 100).toString();
+
+  return {
+    pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD, matches, expand, onDay, timeLabel, repeatLabel, duration,
+    freqOf, isNumeric, weekStart, isDue, markOf, isDoneMark, doneOn, valueOn, weekCount, weekNeed, streak, rate, level, freqLabel, fmtNum,
+  };
 })();
 if (typeof module !== 'undefined') module.exports = Core;

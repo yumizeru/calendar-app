@@ -118,6 +118,24 @@ const Cloud = (() => {
         body: `${lead}${when}${e.memo ? '・' + e.memo.slice(0, 60) : ''}`,
       });
     }
+    // 習慣：14日先まで毎日の通知を登録。「もう達成していたら送らない」はサーバー側で確認する
+    const today = Core.ymd(new Date(now));
+    for (const h of d.habits || []) {
+      if (h.deleted || !h.remindAt) continue;
+      const [hh, mm] = h.remindAt.split(':').map(Number);
+      for (let i = 0; i < 14; i++) {
+        const s = Core.addDaysStr(today, i);
+        if (!Core.isDue(h, s)) continue;
+        if (Core.doneOn(h, d.marks, s)) continue;
+        const [y, m, day] = s.split('-').map(Number);
+        const fire = new Date(y, m - 1, day, hh, mm).getTime();
+        if (fire < now - 60000) continue;
+        let body = 'まだ記録がありません';
+        if (Core.isNumeric(h)) body = `今日の目標 ${Core.fmtNum(h.target.value)}${h.target.unit || ''}`;
+        if (Core.freqOf(h).type === 'weekly') body = `今週 ${Core.weekCount(h, d.marks, s)}/${Core.weekNeed(h)}回`;
+        items.push({ event_id: `habit:${h.id}@${s}`, fire_at: new Date(fire).toISOString(), title: `✅ ${h.name}`, body });
+      }
+    }
     items.sort((a, b) => a.fire_at.localeCompare(b.fire_at));
     return items.slice(0, 500);
   }
