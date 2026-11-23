@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="16">
+  <meta name="app-version" content="17">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -110,10 +110,12 @@
         </label>
         <p class="muted small">この端末だけの設定です（ほかの端末や共有相手には影響しません）。</p>
       </div>
-      <div class="card" id="helpCard">
-        <h3>使い方・ヘルプ</h3>
-        <p class="muted">知りたいことをタップすると、説明が読めます。「📍」の付いたものは、画面を照らして案内もできます。</p>
-        <ul class="help-list" id="helpList"></ul>
+      <div class="card help-entry" id="helpCard">
+        <button class="help-open" id="helpOpen">
+          <span class="hi-icon">📖</span>
+          <span class="hi-text"><b>使い方・ヘルプ</b><small>使い方の説明・画面での案内</small></span>
+          <span class="hi-arrow">›</span>
+        </button>
       </div>
       <div class="card" id="cloudCard">
         <h3>クラウド同期</h3>
@@ -346,9 +348,13 @@
       <h3 id="helpTitle"></h3>
       <button class="icon-btn" id="helpClose" aria-label="とじる">✕</button>
     </div>
-    <div class="help-body" id="helpBody"></div>
-    <div class="row end help-foot">
-      <button class="btn" id="helpBack">一覧にもどる</button>
+    <div class="help-body" id="helpListView">
+      <p class="muted">知りたいことをタップすると、説明が読めます。「📍」の付いたものは、画面を照らして案内もできます。</p>
+      <ul class="help-list" id="helpList"></ul>
+    </div>
+    <div class="help-body" id="helpBody" hidden></div>
+    <div class="row end help-foot" id="helpFoot" hidden>
+      <button class="btn" id="helpBack">‹ 一覧にもどる</button>
       <span class="spacer"></span>
       <button class="btn primary" id="helpTour" hidden>📍 画面で案内する</button>
     </div>

@@ -165,26 +165,38 @@ const Help = (() => {
       <span class="hi-arrow">›</span></button></li>`).join('');
   }
 
+  // 一覧を表示（「使い方・ヘルプ」を押したとき・一覧にもどるとき）
+  function showList() {
+    current = null;
+    $('#helpTitle').textContent = '📖 使い方・ヘルプ';
+    $('#helpListView').hidden = false;
+    $('#helpBody').hidden = true;
+    $('#helpFoot').hidden = true;
+    if (!dlg.open) dlg.showModal();
+    $('#helpListView').scrollTop = 0;
+  }
+  // 1つの説明を表示
   function open(id) {
     const t = TOPICS.find(x => x.id === id);
     if (!t) return;
     current = t;
     $('#helpTitle').textContent = `${t.icon} ${t.title}`;
     $('#helpBody').innerHTML = t.body;
+    $('#helpListView').hidden = true;
+    $('#helpBody').hidden = false;
+    $('#helpFoot').hidden = false;
     $('#helpTour').hidden = !(t.tour && Tour.has(t.tour));
     if (!dlg.open) dlg.showModal();
     $('#helpBody').scrollTop = 0;
   }
 
+  $('#helpOpen').addEventListener('click', showList);
   $('#helpList').addEventListener('click', e => {
     const b = e.target.closest('[data-help]');
     if (b) open(b.dataset.help);
   });
   $('#helpClose').addEventListener('click', () => dlg.close());
-  $('#helpBack').addEventListener('click', () => {
-    dlg.close();
-    $('#helpCard').scrollIntoView({ block: 'start' });
-  });
+  $('#helpBack').addEventListener('click', showList);
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   $('#helpTour').addEventListener('click', () => { if (current && current.tour) Tour.start(current.tour); });
   $('#helpBody').addEventListener('click', e => {
@@ -196,5 +208,5 @@ const Help = (() => {
   });
 
   renderList();
-  return { open, topics: () => TOPICS.map(t => t.id) };
+  return { open, showList, topics: () => TOPICS.map(t => t.id) };
 })();
