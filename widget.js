@@ -37,7 +37,9 @@ try {
 if (!body && fm.fileExists(BODY)) body = fm.readString(BODY);
 try {
   if (!body) throw new Error('本体を読み込めませんでした。ネット接続を確認してください。');
-  await (new Function('CONFIG', 'return (async () => {\\n' + body + '\\n})();'))(CONFIG);
+  // 設定は「引数」「全体の変数」「コードに直接埋め込み」の3通りで渡す（どの環境でも届くように）
+  globalThis.HIBILOG_CONFIG = CONFIG;
+  await (new Function('CONFIG', 'return (async () => {\\nconst CONFIG = ' + JSON.stringify(CONFIG) + ';\\n' + body + '\\n})();'))(CONFIG);
 } catch (e) {
   const w = new ListWidget();
   w.addText('ひびログ');

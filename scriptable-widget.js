@@ -2,8 +2,40 @@
 // アプリの「設定」→「ウィジェット」でコピーすると、先頭に CONFIG が自動で付きます。
 // 対応サイズ：ホーム画面（小・中・大）、ロック画面（長方形・1行）
 
-const C = typeof CONFIG !== 'undefined' ? CONFIG : null;
 const fm = FileManager.local();
+const CONFIG_CACHE = fm.joinPath(fm.documentsDirectory(), 'hibilog-config.json');
+
+// 設定（合言葉など）を探す。読み込み役から渡されなかった場合は、
+// Scriptable に貼ったスクリプト本体のファイルを読んで「const CONFIG = {…};」を取り出す
+function findConfig() {
+  const ok = c => c && c.url && c.key && c.token;
+  try { if (typeof CONFIG !== 'undefined' && ok(CONFIG)) return CONFIG; } catch (e) {}
+  try { if (typeof globalThis !== 'undefined' && ok(globalThis.HIBILOG_CONFIG)) return globalThis.HIBILOG_CONFIG; } catch (e) {}
+  const fromText = t => {
+    const m = t && t.match(/const CONFIG = (\{[^\n]*\});/);
+    if (!m) return null;
+    try { const c = JSON.parse(m[1]); return ok(c) ? c : null; } catch (e) { return null; }
+  };
+  const paths = [];
+  try { if (typeof module !== 'undefined' && module.filename) paths.push(module.filename); } catch (e) {}
+  for (const make of [() => FileManager.iCloud(), () => FileManager.local()]) {
+    try { const f = make(); paths.push(f.joinPath(f.documentsDirectory(), Script.name() + '.js')); } catch (e) {}
+  }
+  for (const p of paths) {
+    for (const make of [() => FileManager.iCloud(), () => FileManager.local()]) {
+      try {
+        const f = make();
+        if (!f.fileExists(p)) continue;
+        const c = fromText(f.readString(p));
+        if (c) { try { fm.writeString(CONFIG_CACHE, JSON.stringify(c)); } catch (e) {} return c; }
+      } catch (e) {}
+    }
+  }
+  try { if (fm.fileExists(CONFIG_CACHE)) { const c = JSON.parse(fm.readString(CONFIG_CACHE)); if (ok(c)) return c; } } catch (e) {}
+  return null;
+}
+const C = findConfig();
+if (C) { try { fm.writeString(CONFIG_CACHE, JSON.stringify(C)); } catch (e) {} }
 const CACHE = fm.joinPath(fm.documentsDirectory(), 'hibilog-widget-cache.json');
 
 /* ---------- 色 ---------- */
