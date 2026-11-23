@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14161c" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ひびログ">
+  <title>ひびログ</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="prevMonth" aria-label="前の月">‹</button>
+    <button class="month-title" id="monthTitle" aria-label="今日に戻る"></button>
+    <button class="icon-btn" id="nextMonth" aria-label="次の月">›</button>
+  </header>
+
+  <main>
+    <!-- カレンダー -->
+    <section class="view" id="view-calendar">
+      <div class="weekdays">
+        <span class="sun">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="sat">土</span>
+      </div>
+      <div class="grid" id="grid"></div>
+
+      <div class="day-panel">
+        <div class="day-head">
+          <h2 id="dayTitle"></h2>
+          <button class="btn primary" id="addEvent">＋ 予定</button>
+        </div>
+        <ul class="event-list" id="eventList"></ul>
+        <h3 class="sub">習慣</h3>
+        <ul class="habit-checks" id="habitChecks"></ul>
+      </div>
+    </section>
+
+    <!-- 習慣 -->
+    <section class="view" id="view-habits" hidden>
+      <div class="card">
+        <form id="habitForm" class="habit-form">
+          <input id="habitName" type="text" placeholder="新しい習慣（例：読書 10分）" maxlength="30" required>
+          <input id="habitColor" type="color" value="#4f7cff" aria-label="色">
+          <button class="btn primary" type="submit">追加</button>
+        </form>
+      </div>
+      <ul class="habit-list" id="habitList"></ul>
+    </section>
+
+    <!-- 設定 -->
+    <section class="view" id="view-settings" hidden>
+      <div class="card">
+        <h3>バックアップ</h3>
+        <p class="muted">データはこの端末のブラウザ内だけに保存されます。機種変更や別の端末に移すときは書き出してください。</p>
+        <div class="row">
+          <button class="btn" id="exportBtn">書き出す</button>
+          <label class="btn">読み込む<input type="file" id="importFile" accept="application/json,.json" hidden></label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>iPhoneのホーム画面に追加</h3>
+        <p class="muted">Safariでこのページを開き、共有ボタン →「ホーム画面に追加」でアプリのように使えます。</p>
+      </div>
+      <div class="card danger-zone">
+        <h3>すべて削除</h3>
+        <p class="muted">予定・習慣・記録をすべて消します。元に戻せません。</p>
+        <button class="btn danger" id="resetBtn">すべて削除</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="calendar"><span class="tab-ico">📅</span>カレンダー</button>
+    <button class="tab" data-view="habits"><span class="tab-ico">✅</span>習慣</button>
+    <button class="tab" data-view="settings"><span class="tab-ico">⚙️</span>設定</button>
+  </nav>
+
+  <dialog id="eventDialog">
+    <form method="dialog" id="eventForm">
+      <h3 id="eventDialogTitle">予定</h3>
+      <label>タイトル<input id="evTitle" type="text" maxlength="60" required></label>
+      <div class="row">
+        <label>日付<input id="evDate" type="date" required></label>
+        <label>時刻<input id="evTime" type="time"></label>
+      </div>
+      <label>メモ<textarea id="evMemo" rows="3" maxlength="500"></textarea></label>
+      <div class="row end">
+        <button class="btn danger" id="evDelete" type="button">削除</button>
+        <span class="spacer"></span>
+        <button class="btn" value="cancel" type="button" id="evCancel">キャンセル</button>
+        <button class="btn primary" value="save" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

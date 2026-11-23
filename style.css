@@ -1,0 +1,185 @@
+:root {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef0f6;
+  --text: #1c1f27;
+  --muted: #6b7280;
+  --border: #e2e5ee;
+  --accent: #4f7cff;
+  --accent-text: #ffffff;
+  --sun: #e5484d;
+  --sat: #3b82f6;
+  --today: #4f7cff;
+  --danger: #e5484d;
+  --radius: 14px;
+  --tabbar-h: 60px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161c;
+    --surface: #1d2028;
+    --surface-2: #262a34;
+    --text: #e8eaf0;
+    --muted: #9aa1ae;
+    --border: #2f3440;
+    --accent: #6d93ff;
+    --sun: #ff6b6f;
+    --sat: #60a5fa;
+    --today: #6d93ff;
+    --danger: #ff6b6f;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  min-height: 100vh;
+}
+button, input, textarea { font: inherit; color: inherit; }
+main { max-width: 640px; margin: 0 auto; padding: 0 12px 16px; }
+
+/* ヘッダー */
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  max-width: 640px; margin: 0 auto; padding: 10px 12px;
+  background: var(--bg);
+}
+.month-title {
+  border: 0; background: none; font-size: 1.25rem; font-weight: 700; cursor: pointer; padding: 6px 12px;
+}
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 0;
+  background: var(--surface); font-size: 1.5rem; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+
+/* カレンダー */
+.weekdays, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.weekdays { font-size: .75rem; color: var(--muted); text-align: center; margin-bottom: 4px; }
+.weekdays .sun { color: var(--sun); }
+.weekdays .sat { color: var(--sat); }
+.cell {
+  aspect-ratio: 1 / 1.05; min-width: 0;
+  border: 1px solid transparent; border-radius: 10px;
+  background: var(--surface); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; padding: 4px 2px; gap: 2px;
+  position: relative;
+}
+.cell.other { opacity: .35; }
+.cell .num { font-size: .9rem; font-weight: 600; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; }
+.cell.sun .num { color: var(--sun); }
+.cell.sat .num { color: var(--sat); }
+.cell.today .num { background: var(--today); color: #fff; }
+.cell.selected { border-color: var(--accent); }
+.cell .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; max-width: 100%; }
+.dot { width: 6px; height: 6px; border-radius: 50%; }
+.cell .ev-count {
+  font-size: .62rem; color: var(--accent); font-weight: 700; line-height: 1;
+}
+
+/* 日パネル */
+.day-panel { margin-top: 14px; background: var(--surface); border-radius: var(--radius); padding: 14px; }
+.day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.day-head h2 { margin: 0; font-size: 1.05rem; }
+.sub { font-size: .85rem; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.event-list, .habit-checks, .habit-list { list-style: none; margin: 0; padding: 0; }
+.event-list li {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.event-list li:last-child { border-bottom: 0; }
+.event-list .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem; min-width: 3.2em; }
+.event-list .title { font-weight: 600; word-break: break-word; }
+.event-list .memo { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); margin-top: 2px; white-space: pre-wrap; }
+.empty { color: var(--muted); font-size: .85rem; padding: 8px 4px; }
+
+.habit-checks li label {
+  display: flex; align-items: center; gap: 10px; padding: 8px 4px; cursor: pointer;
+}
+.check {
+  appearance: none; -webkit-appearance: none; margin: 0;
+  width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--c, var(--accent));
+  display: grid; place-items: center; cursor: pointer; flex: none;
+}
+.check:checked { background: var(--c, var(--accent)); }
+.check:checked::after { content: "✓"; color: #fff; font-size: .85rem; font-weight: 700; }
+
+/* カード・ボタン */
+.card { background: var(--surface); border-radius: var(--radius); padding: 14px; margin-top: 12px; }
+.card h3 { margin: 0 0 6px; font-size: 1rem; }
+.muted { color: var(--muted); font-size: .85rem; margin: 0 0 10px; line-height: 1.5; }
+.row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.row.end { justify-content: flex-end; align-items: center; }
+.spacer { flex: 1; }
+.btn {
+  border: 1px solid var(--border); background: var(--surface-2);
+  padding: 9px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: .9rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.danger { color: var(--danger); background: transparent; border-color: var(--danger); }
+.btn.small { padding: 5px 10px; font-size: .8rem; }
+
+/* 習慣タブ */
+.habit-form { display: flex; gap: 8px; }
+.habit-form input[type=text] {
+  flex: 1; min-width: 0; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg);
+}
+.habit-form input[type=color] { width: 44px; height: 40px; border: 1px solid var(--border); border-radius: 10px; padding: 2px; background: var(--bg); }
+.habit-list li { background: var(--surface); border-radius: var(--radius); padding: 14px; margin-top: 10px; }
+.habit-top { display: flex; align-items: center; gap: 10px; }
+.habit-top .name { font-weight: 700; flex: 1; word-break: break-word; }
+.habit-stats { display: flex; gap: 16px; margin: 10px 0; font-size: .8rem; color: var(--muted); }
+.habit-stats b { display: block; font-size: 1.15rem; color: var(--text); }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week button {
+  border: 0; border-radius: 8px; background: var(--surface-2); padding: 6px 0; cursor: pointer;
+  font-size: .7rem; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.week button.on { background: var(--c); color: #fff; }
+.week button b { font-size: .85rem; }
+
+/* タブバー */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; justify-content: center;
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  flex: 1; max-width: 213px; height: var(--tabbar-h); border: 0; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: .7rem; color: var(--muted);
+}
+.tab.active { color: var(--accent); font-weight: 700; }
+.tab-ico { font-size: 1.2rem; filter: grayscale(1); opacity: .7; }
+.tab.active .tab-ico { filter: none; opacity: 1; }
+
+/* ダイアログ */
+dialog {
+  border: 0; border-radius: 18px; padding: 18px; width: min(92vw, 440px);
+  background: var(--surface); color: var(--text);
+}
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 12px; }
+dialog label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); margin-bottom: 10px; flex: 1; }
+dialog input, dialog textarea {
+  padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 1rem; width: 100%;
+}
+
+/* トースト */
+.toast {
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 14px);
+  transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
+  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .85rem;
+  transition: opacity .2s, transform .2s; z-index: 20; max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
