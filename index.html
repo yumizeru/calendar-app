@@ -88,6 +88,16 @@
           <button class="btn" id="pushDisable" hidden>オフにする</button>
         </div>
       </div>
+      <div class="card" id="widgetCard" hidden>
+        <h3>ホーム画面ウィジェット</h3>
+        <p class="muted">無料アプリ「Scriptable」を使って、今日の予定と習慣をホーム画面に表示できます。下のボタンでスクリプトをコピーし、Scriptableに貼り付けてください。</p>
+        <p class="sync-status" id="widgetStatus"></p>
+        <div class="row">
+          <button class="btn primary" id="widgetCopy">スクリプトをコピー</button>
+          <button class="btn" id="widgetRegen">合言葉を作り直す</button>
+        </div>
+        <textarea id="widgetScript" class="script-box" rows="6" readonly hidden></textarea>
+      </div>
       <div class="card">
         <h3>バックアップ</h3>
         <p class="muted">データはこの端末に保存されます（ログイン中はクラウドにも保存）。念のため、ときどき書き出しておくと安心です。</p>
@@ -151,5 +161,6 @@
   <script src="app.js"></script>
   <script src="sync.js"></script>
   <script src="push.js"></script>
+  <script src="widget.js"></script>
 </body>
 </html>
