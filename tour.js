@@ -13,7 +13,15 @@ const Tour = (() => {
   const goMonth = () => { goTab('calendar'); const b = document.querySelector('.seg-btn[data-mode="month"]'); if (b) b.click(); };
   const loggedIn = () => typeof Cloud !== 'undefined' && !!Cloud.session;
   const openDetails = sel => { const d = $(sel); if (d) d.open = true; return d; };
-  const settingsAt = sel => () => { goTab('settings'); const el = $(sel); if (el) el.scrollIntoView({ block: 'center' }); };
+  // 設定の項目はタップで開く形なので、案内する前にその項目を開いておく
+  const openedByTour = new Set(); // ガイドが開いた項目は、終わったら閉じ直す
+  const openAcc = sel => {
+    const el = $(sel);
+    const acc = el && (el.matches('details.acc') ? el : el.closest('details.acc'));
+    if (acc && !acc.open) { acc.open = true; openedByTour.add(acc); }
+    return el;
+  };
+  const settingsAt = sel => () => { goTab('settings'); const el = openAcc(sel); if (el) el.scrollIntoView({ block: 'center' }); };
 
   /* ---------- はじめてガイド ---------- */
   const MAIN = [
@@ -54,10 +62,10 @@ const Tour = (() => {
       before: goMonth,
     },
     {
-      target: '#view-settings .card',
+      target: '#accView',
       title: '文字が小さくて読みにくいときは',
-      text: '「設定」の「見やすさ・表示」で、文字を大きくできます。\n文字を大きくしたときは、日付を縦に並べて予定を大きな文字で読める「1列」表示がおすすめです。',
-      before: () => goTab('settings'),
+      text: '「設定」の「見やすさ・表示」で、文字を大きくできます。\n文字を大きくしたときは、日付を縦に並べて予定を大きな文字で読める「1列」表示がおすすめです。\n\n設定の各項目は、タップすると開きます。',
+      before: settingsAt('#accView'),
       action: {
         label: '文字を大きくして「1列」にする',
         run: () => {
@@ -69,7 +77,7 @@ const Tour = (() => {
     {
       target: '#cloudCard',
       title: 'スマホとパソコンで同じデータを',
-      text: 'ここでログインすると、ほかの端末と同じ予定を見られます。\n通知・ウィジェット・家族との共有カレンダーにも、ログインが必要です。',
+      text: '「アカウントと同期」でログインすると、ほかの端末と同じ予定を見られます。\n通知・ウィジェット・家族との共有カレンダーにも、ログインが必要です。',
       before: settingsAt('#cloudCard'),
     },
     {
@@ -98,7 +106,7 @@ const Tour = (() => {
     {
       target: () => (loggedIn() ? null : '#cloudCard'),
       title: 'はじめに：全員ログインが必要です',
-      text: '共有するには、あなたも相手も、それぞれのスマホでログイン（はじめての人は「新規登録」）しておく必要があります。\nログインは「設定」の「クラウド同期」からできます。',
+      text: '共有するには、あなたも相手も、それぞれのスマホでログイン（はじめての人は「新規登録」）しておく必要があります。\nログインは「設定」の「アカウントと同期」からできます。',
       before: settingsAt('#cloudCard'),
       skipIf: loggedIn,
     },
@@ -123,7 +131,7 @@ const Tour = (() => {
     {
       target: () => (loggedIn() ? '#shJoin' : null),
       title: '②′ 招待された人は',
-      text: '届いたURLを開いてログインしたら、「設定」→「共有カレンダー」→「招待コードで参加」に、10文字のコードを入力して「参加」を押します。',
+      text: '届いたURLを開いてログインしたら、「設定」→「家族と共有」→「招待コードで参加」に、10文字のコードを入力して「参加」を押します。',
       before: () => { settingsAt('#sharedCard')(); const ds = document.querySelectorAll('#sharedCard .sh-details'); if (ds[1]) { ds[1].open = true; ds[1].scrollIntoView({ block: 'center' }); } },
     },
     {
@@ -265,6 +273,8 @@ const Tour = (() => {
     document.removeEventListener('keydown', onKey);
     if (root) root.remove();
     root = null;
+    for (const acc of openedByTour) acc.open = false;
+    openedByTour.clear();
   }
   // name：'main'（はじめてガイド） / 'shared'（共有のしかた）
   function start(name = 'main') {

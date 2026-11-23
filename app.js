@@ -303,7 +303,19 @@ function applyPrefs() {
     : (MONTH_HINTS[prefs.monthStyle] || '');
   // 大きい文字を選んでいて、まだ「1列」でなければ、1列をすすめる説明を出す
   $('#prefFontTip').hidden = !(Number(prefs.font) > 1 && prefs.monthStyle !== 'column');
+  if (typeof Updater !== 'undefined') updateSettingsSummary();
 }
+// 設定の各項目を閉じたときに右に出す「今の状態」
+function updateSettingsSummary() {
+  const fontName = { '1': '標準', '1.18': '大きい', '1.36': 'とても大きい' }[String(prefs.font)] || '標準';
+  const styleName = { dots: 'シンプル', titles: '予定名', column: '1列' }[prefs.monthStyle] || 'シンプル';
+  $('#sumView').textContent = `文字：${fontName} ・ 月表示：${styleName}${prefs.contrast ? ' ・ くっきり' : ''}`;
+  $('#sumCat').textContent = `${activeCategories().length}個`;
+  $('#sumAbout').textContent = `バージョン ${Updater.version}`;
+  const loggedIn = typeof Cloud !== 'undefined' && !!Cloud.session;
+  $('#widgetLoginNote').hidden = loggedIn;
+}
+
 function setPref(k, v) {
   if (k === 'monthStyle' && v === 'column') scrollColPending = true;
   prefs[k] = v;
@@ -522,7 +534,7 @@ function render() {
   if (currentView === 'calendar') renderCalendar();
   else if (currentView === 'habits') renderHabits();
   else if (currentView === 'todos') renderTodos();
-  else { $('#monthTitle').textContent = '設定'; renderCategories(); }
+  else { $('#monthTitle').textContent = '設定'; renderCategories(); updateSettingsSummary(); }
   updateTodoBadge();
   const showNav = currentView === 'habits' || (currentView === 'calendar' && calMode !== 'list');
   $('#prevMonth').style.visibility = showNav ? '' : 'hidden';

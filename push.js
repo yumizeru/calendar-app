@@ -67,8 +67,11 @@ const Push = (() => {
     card.hidden = !Cloud.session;
     if (!Cloud.session) return;
     const status = $('#pushStatus');
+    // 閉じているときに出す状態（ボタンの出し方から決める）
     const show = (on, off, testBtn) => {
       $('#pushEnable').hidden = !on; $('#pushDisable').hidden = !off; $('#pushTest').hidden = !testBtn;
+      const sum = $('#sumPush');
+      if (sum) sum.textContent = off ? 'この端末でオン' : on ? 'オフ（タップしてオンにする）' : '使えません（くわしくはタップ）';
     };
     if (!supported || (isIOS && !standalone)) {
       status.textContent = isIOS

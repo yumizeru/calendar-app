@@ -467,6 +467,28 @@ body[data-month-style="titles"] .cell .dots { justify-content: center; }
 .tour-nav { display: flex; align-items: center; gap: 8px; position: sticky; bottom: -12px; background: var(--surface); padding: 8px 0 12px; margin-bottom: -12px; }
 .tour-nav .btn { padding: 10px 16px; font-size: .95rem; }
 
+/* 設定：タップで開く項目（アコーディオン） */
+.set-group { background: var(--surface); border-radius: var(--radius); margin-top: 12px; overflow: hidden; }
+.acc, .acc-row { border-bottom: 1px solid var(--border); }
+.set-group > :last-child { border-bottom: 0; }
+.acc > summary, .acc-row > button {
+  list-style: none; display: flex; align-items: center; gap: 12px; padding: 13px 14px; cursor: pointer;
+  width: 100%; background: none; border: 0; color: var(--text); text-align: left; font: inherit;
+}
+.acc > summary::-webkit-details-marker { display: none; }
+.acc-ico { font-size: 1.3rem; flex: none; width: 1.8rem; text-align: center; }
+.acc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.acc-text b { font-size: .98rem; }
+.acc-text small { font-size: .75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-chev { flex: none; color: var(--muted); font-size: 1.4rem; transition: transform .2s; }
+.acc[open] > summary .acc-chev { transform: rotate(90deg); }
+.acc[open] > summary { background: var(--surface-2); }
+.acc-body { padding: 12px 14px 16px; }
+.acc-sub { margin: 14px 0 6px; font-size: .9rem; }
+.acc-sub:first-child { margin-top: 0; }
+.danger-text { color: var(--danger); }
+body.hc .set-group { border: 1.5px solid var(--border); }
+
 /* 使い方・ヘルプ */
 .help-entry { padding: 4px 14px; }
 .help-open {

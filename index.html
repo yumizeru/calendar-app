@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="17">
+  <meta name="app-version" content="18">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -81,8 +81,11 @@
 
     <!-- 設定 -->
     <section class="view" id="view-settings" hidden>
-      <div class="card">
-        <h3>見やすさ・表示</h3>
+      <!-- 各項目はタップで開く。閉じているときも右側に今の状態を出す -->
+      <div class="set-group">
+      <details class="acc" id="accView">
+        <summary><span class="acc-ico">🔎</span><span class="acc-text"><b>見やすさ・表示</b><small id="sumView"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
         <div class="set-row">
           <span>月表示のスタイル</span>
           <div class="seg" id="prefMonthStyle">
@@ -109,16 +112,21 @@
           <input type="checkbox" class="switch" id="prefContrast">
         </label>
         <p class="muted small">この端末だけの設定です（ほかの端末や共有相手には影響しません）。</p>
-      </div>
-      <div class="card help-entry" id="helpCard">
+        </div>
+      </details>
+      <div class="acc-row" id="helpCard">
         <button class="help-open" id="helpOpen">
-          <span class="hi-icon">📖</span>
-          <span class="hi-text"><b>使い方・ヘルプ</b><small>使い方の説明・画面での案内</small></span>
-          <span class="hi-arrow">›</span>
+          <span class="acc-ico">📖</span>
+          <span class="acc-text"><b>使い方・ヘルプ</b><small>使い方の説明・画面での案内</small></span>
+          <span class="acc-chev">›</span>
         </button>
       </div>
-      <div class="card" id="cloudCard">
-        <h3>クラウド同期</h3>
+      </div>
+
+      <div class="set-group">
+      <details class="acc" id="cloudCard">
+        <summary><span class="acc-ico">☁️</span><span class="acc-text"><b>アカウントと同期</b><small id="sumCloud"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
         <div id="cloudOut">
           <p class="muted">ログインすると、iPhoneとPCなど複数の端末で同じデータを使えます。リマインダー通知やウィジェットにもログインが必要です。</p>
           <p class="muted" id="cloudUnavailable" hidden>同期機能を読み込めませんでした。ネットにつながった状態でアプリを開き直してください。</p>
@@ -140,9 +148,11 @@
             <button class="btn" id="logoutBtn">ログアウト</button>
           </div>
         </div>
-      </div>
-      <div class="card" id="sharedCard" hidden>
-        <h3>共有カレンダー</h3>
+        </div>
+      </details>
+      <details class="acc" id="sharedCard" hidden>
+        <summary><span class="acc-ico">👥</span><span class="acc-text"><b>家族と共有（共有カレンダー）</b><small id="sumShared"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
         <p class="muted">家族や友人と予定を共有できます。共有カレンダーに入れた予定だけが相手に見え、自分の予定・習慣・ToDoは見えません。</p>
         <label class="inline-field">あなたの表示名<input id="shName" type="text" maxlength="20" placeholder="例：ママ"></label>
         <ul class="shared-list" id="sharedList"></ul>
@@ -161,9 +171,43 @@
             <button class="btn primary" type="submit">参加</button>
           </form>
         </details>
+        </div>
+      </details>
+      <details class="acc" id="pushCard" hidden>
+        <summary><span class="acc-ico">🔔</span><span class="acc-text"><b>通知（リマインダー）</b><small id="sumPush"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
+        <p class="muted" id="pushStatus"></p>
+        <div class="row">
+          <button class="btn primary" id="pushEnable" hidden>通知をオンにする</button>
+          <button class="btn" id="pushTest" hidden>テスト通知を送る</button>
+          <button class="btn" id="pushDisable" hidden>オフにする</button>
+        </div>
+        </div>
+      </details>
       </div>
-      <div class="card">
-        <h3>カテゴリ</h3>
+
+      <div class="set-group">
+      <details class="acc" id="homeCard">
+        <summary><span class="acc-ico">📱</span><span class="acc-text"><b>ホーム画面（アプリ・ウィジェット）</b><small>ホーム画面に追加・ウィジェット</small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
+        <h4 class="acc-sub">アプリのようにホーム画面に置く</h4>
+        <p class="muted">iPhoneのSafariでこのページを開き、共有ボタン（□に↑）→「ホーム画面に追加」でアプリのように使えます。通知を受け取るにも必要です。</p>
+        <h4 class="acc-sub">ホーム画面ウィジェット</h4>
+        <p class="muted" id="widgetLoginNote">ウィジェットを使うには、「アカウントと同期」でログインしてください。</p>
+        <div id="widgetCard" hidden>
+          <p class="muted">無料アプリ「Scriptable」を使って、今日の予定と習慣をホーム画面に表示できます。下のボタンでスクリプトをコピーし、Scriptableに貼り付けてください。</p>
+          <p class="sync-status" id="widgetStatus"></p>
+          <div class="row">
+            <button class="btn primary" id="widgetCopy">スクリプトをコピー</button>
+            <button class="btn" id="widgetRegen">合言葉を作り直す</button>
+          </div>
+          <textarea id="widgetScript" class="script-box" rows="6" readonly hidden></textarea>
+        </div>
+        </div>
+      </details>
+      <details class="acc" id="catCard">
+        <summary><span class="acc-ico">🎨</span><span class="acc-text"><b>カテゴリ（予定の色分け）</b><small id="sumCat"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
         <p class="muted">予定の色分けに使います。名前と色を変えたり、増やしたりできます。</p>
         <ul class="cat-list" id="catList"></ul>
         <form id="catForm" class="habit-form">
@@ -171,47 +215,32 @@
           <input id="catColor" type="color" value="#a855f7" aria-label="色">
           <button class="btn primary" type="submit">追加</button>
         </form>
-      </div>
-      <div class="card" id="pushCard" hidden>
-        <h3>リマインダー通知</h3>
-        <p class="muted" id="pushStatus"></p>
-        <div class="row">
-          <button class="btn primary" id="pushEnable" hidden>通知をオンにする</button>
-          <button class="btn" id="pushTest" hidden>テスト通知を送る</button>
-          <button class="btn" id="pushDisable" hidden>オフにする</button>
         </div>
+      </details>
       </div>
-      <div class="card" id="widgetCard" hidden>
-        <h3>ホーム画面ウィジェット</h3>
-        <p class="muted">無料アプリ「Scriptable」を使って、今日の予定と習慣をホーム画面に表示できます。下のボタンでスクリプトをコピーし、Scriptableに貼り付けてください。</p>
-        <p class="sync-status" id="widgetStatus"></p>
-        <div class="row">
-          <button class="btn primary" id="widgetCopy">スクリプトをコピー</button>
-          <button class="btn" id="widgetRegen">合言葉を作り直す</button>
-        </div>
-        <textarea id="widgetScript" class="script-box" rows="6" readonly hidden></textarea>
-      </div>
-      <div class="card">
-        <h3>バックアップ</h3>
+
+      <div class="set-group">
+      <details class="acc" id="dataCard">
+        <summary><span class="acc-ico">💾</span><span class="acc-text"><b>データの管理</b><small>バックアップ・すべて削除</small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
+        <h4 class="acc-sub">バックアップ</h4>
         <p class="muted">データはこの端末に保存されます（ログイン中はクラウドにも保存）。念のため、ときどき書き出しておくと安心です。</p>
         <div class="row">
           <button class="btn" id="exportBtn">書き出す</button>
           <label class="btn">読み込む<input type="file" id="importFile" accept="application/json,.json" hidden></label>
         </div>
-      </div>
-      <div class="card">
-        <h3>iPhoneのホーム画面に追加</h3>
-        <p class="muted">Safariでこのページを開き、共有ボタン →「ホーム画面に追加」でアプリのように使えます。</p>
-      </div>
-      <div class="card">
-        <h3>アプリのバージョン</h3>
-        <p class="muted">バージョン <b id="appVersion"></b>。新しい版が出ると、アプリを開いたときに自動で更新されます。</p>
-        <button class="btn" id="checkUpdate">今すぐ更新を確認</button>
-      </div>
-      <div class="card danger-zone">
-        <h3>すべて削除</h3>
+        <h4 class="acc-sub danger-text">すべて削除</h4>
         <p class="muted">予定・習慣・記録をすべて消します。元に戻せません。</p>
         <button class="btn danger" id="resetBtn">すべて削除</button>
+        </div>
+      </details>
+      <details class="acc" id="aboutCard">
+        <summary><span class="acc-ico">ℹ️</span><span class="acc-text"><b>アプリについて</b><small id="sumAbout"></small></span><span class="acc-chev">›</span></summary>
+        <div class="acc-body">
+        <p class="muted">バージョン <b id="appVersion"></b>。新しい版が出ると、アプリを開いたときに自動で更新されます。</p>
+        <button class="btn" id="checkUpdate">今すぐ更新を確認</button>
+        </div>
+      </details>
       </div>
     </section>
   </main>

@@ -136,7 +136,7 @@ const Shared = (() => {
   function inviteText(c) {
     return `ひびログの共有カレンダー「${c.name}」に招待します。\n` +
       `1. ${APP_URL} を開き、「設定」でログイン（はじめての人は新規登録）\n` +
-      `2. 「共有カレンダー」→「招待コードで参加」に次のコードを入力\n${c.invite_code}`;
+      `2. 「設定」→「家族と共有」→「招待コードで参加」に次のコードを入力\n${c.invite_code}`;
   }
   async function shareInvite(c) {
     const text = inviteText(c);
@@ -162,6 +162,9 @@ const Shared = (() => {
     card.hidden = !Cloud.session;
     if (!Cloud.session) return;
     if (document.activeElement !== $('#shName')) $('#shName').value = displayName();
+    $('#sumShared').textContent = state.calendars.length
+      ? state.calendars.map(c => c.name).join('・') + `（${state.calendars.length}個）`
+      : 'まだありません（作る・参加する）';
     const myId = me();
     $('#sharedList').innerHTML = state.calendars.length ? state.calendars.map(c => {
       const names = state.members.filter(m => m.calendar_id === c.id).map(m => m.display_name || '名前なし');

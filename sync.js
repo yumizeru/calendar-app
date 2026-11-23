@@ -57,6 +57,8 @@ const Cloud = (() => {
       $('#loginForm').hidden = false;
     }
     document.body.classList.toggle('signed-in', !!session);
+    const sum = $('#sumCloud');
+    if (sum) sum.textContent = session ? `${session.user.email || ''} でログイン中` : 'ログインしていません（タップしてログイン）';
     document.dispatchEvent(new CustomEvent('hibilog:auth'));
   }
 
