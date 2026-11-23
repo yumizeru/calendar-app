@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="14">
+  <meta name="app-version" content="15">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -193,6 +193,11 @@
         </div>
       </div>
       <div class="card">
+        <h3>使い方ガイド</h3>
+        <p class="muted">画面の大事なところを、順番にご案内します（1分ほど）。</p>
+        <button class="btn primary" id="tourStart">使い方ガイドを見る</button>
+      </div>
+      <div class="card">
         <h3>iPhoneのホーム画面に追加</h3>
         <p class="muted">Safariでこのページを開き、共有ボタン →「ホーム画面に追加」でアプリのように使えます。</p>
       </div>
@@ -356,5 +361,6 @@
   <script src="shared.js"></script>
   <script src="push.js"></script>
   <script src="widget.js"></script>
+  <script src="tour.js"></script>
 </body>
 </html>
