@@ -681,3 +681,29 @@ html[data-tone="dark"] .badge { color: #fbbf24; }
 .rmood-bar i { display: block; width: 100%; background: var(--mc); border-radius: 6px 6px 0 0; }
 .rmood .ico { width: 1.3rem; height: 1.3rem; }
 .rmood small { color: var(--muted); font-size: .7rem; }
+
+/* =====================================================================
+ * 第2弾：天気・バックアップ・共有の通知
+ * ===================================================================== */
+.cell { position: relative; }
+.wx-mini { position: absolute; top: 2px; right: 2px; color: var(--muted); line-height: 0; }
+.wx-mini .ico { width: .8rem; height: .8rem; }
+html:not([data-fs="1"]) .wx-mini { display: none; } /* 大きい文字のときはマスが窮屈になるので出さない */
+.wx-short { display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; color: var(--muted); margin-left: 4px; font-weight: 600; }
+.wx-short .ico { width: 1rem; height: 1rem; }
+.wx-short .hi, .wx-line .hi { color: #e5484d; }
+.wx-short .lo, .wx-line .lo { color: #3b82f6; }
+html[data-tone="dark"] .wx-short .lo, html[data-tone="dark"] .wx-line .lo { color: #60a5fa; }
+.mbody .wx-short { margin: 0; align-self: flex-start; }
+.wx-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin: 6px 0 2px; }
+.wx-line .ico { width: 1.25rem; height: 1.25rem; color: var(--accent); }
+.wx-line b { color: var(--text); }
+.wx-line .pop { margin-left: 4px; }
+.wx-line .place { margin-left: auto; font-size: .75rem; }
+.wx-search { margin-top: 8px; }
+#wxResults button span { display: flex; flex-direction: column; }
+#wxResults small { font-size: .72rem; color: var(--muted); }
+.backup-list { list-style: none; margin: 6px 0 10px; padding: 0; }
+.backup-list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
+.backup-list li span { flex: 1; }
+.backup-list small { color: var(--muted); }

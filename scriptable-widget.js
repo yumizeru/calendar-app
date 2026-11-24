@@ -40,13 +40,24 @@ const CACHE = fm.joinPath(fm.documentsDirectory(), 'hibilog-widget-cache.json');
 
 /* ---------- 色 ---------- */
 const dyn = (l, d) => Color.dynamic(new Color(l), new Color(d));
-const COL = {
+let COL = {
   bg: dyn('#ffffff', '#1d2028'),
   text: dyn('#1c1f27', '#e8eaf0'),
   muted: dyn('#6b7280', '#9aa1ae'),
   accent: dyn('#4f7cff', '#6d93ff'),
   red: dyn('#e5484d', '#ff6b6f'),
 };
+
+// アプリで選んだテーマの色にする（なければ標準の色のまま）
+function useAppearance(a) {
+  if (!a) return;
+  const red = COL.red;
+  if (a.auto && a.light && a.dark) {
+    COL = { bg: dyn(a.light.bg, a.dark.bg), text: dyn(a.light.text, a.dark.text), muted: dyn(a.light.muted, a.dark.muted), accent: dyn(a.light.accent, a.dark.accent), red };
+  } else if (a.bg) {
+    COL = { bg: new Color(a.bg), text: new Color(a.text), muted: new Color(a.muted), accent: new Color(a.accent), red };
+  }
+}
 
 /* ---------- 日付 ---------- */
 const pad = n => String(n).padStart(2, '0');
@@ -383,6 +394,7 @@ if (!C) {
   try {
     const r = await loadData();
     CoreLib = await loadCore();
+    if (r.data) useAppearance(r.data.appearance);
     widget = r.data ? build(view(r.data), r.stale) : message('合言葉が無効です。アプリの「設定」からスクリプトをコピーし直してください。');
   } catch (e) {
     widget = message('読み込めませんでした。ネット接続を確認してください。');

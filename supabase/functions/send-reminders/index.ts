@@ -74,7 +74,9 @@ async function runDue() {
     .is('sent_at', null).lte('fire_at', until)
     .select('id,user_id,event_id,title,body');
   if (error) throw error;
-  if (!due?.length) return { due: 0, sent: 0 };
+  const queued = await runQueue();
+  await pruneBackups(now);
+  if (!due?.length) return { due: 0, sent: 0, queued };
 
   const userIds = [...new Set(due.map((r) => r.user_id))];
   const subs = await subsFor(userIds);
@@ -101,7 +103,49 @@ async function runDue() {
     sent += res.ok;
     errors.push(...res.errors);
   }
-  return { due: due.length, sent, skipped, errors: errors.slice(0, 5) };
+  return { due: due.length, sent, skipped, queued, errors: errors.slice(0, 5) };
+}
+
+// 共有カレンダーの変更通知（データベースが notify_queue に積んだもの）を送る
+async function runQueue() {
+  // 積まれてから20秒以上たったものだけ送る（続けて直したときに、まとめてから1回で送るため）
+  const ready = new Date(Date.now() - 20_000).toISOString();
+  const { data: rows, error } = await db.from('notify_queue')
+    .update({ sent_at: new Date().toISOString() })
+    .is('sent_at', null).lte('created_at', ready)
+    .select('id,user_id,tag,title,body');
+  if (error) throw error;
+  if (!rows?.length) return 0;
+  const subs = await subsFor([...new Set(rows.map((r) => r.user_id))]);
+  let sent = 0;
+  for (const r of rows) {
+    const res = await sendTo(subs.filter((s) => s.user_id === r.user_id), { title: r.title, body: r.body, tag: r.tag, url: APP_URL });
+    sent += res.ok;
+  }
+  return sent;
+}
+
+// 古いものの片付け（1時間に1回）：自動バックアップは各自の新しい8件だけ残す。送った通知は7日で消す
+async function pruneBackups(now: number) {
+  if (new Date(now).getUTCMinutes() !== 7) return;
+  await db.from('notify_queue').delete().not('sent_at', 'is', null).lt('sent_at', new Date(now - 7 * 86400_000).toISOString());
+  const { data } = await db.from('user_backups').select('id,user_id').eq('kind', 'auto').order('created_at', { ascending: false });
+  const seen = new Map<string, number>();
+  const old: number[] = [];
+  for (const b of data ?? []) {
+    const n = (seen.get(b.user_id) ?? 0) + 1;
+    seen.set(b.user_id, n);
+    if (n > 8) old.push(b.id);
+  }
+  // 手動バックアップは新しい5件だけ残す
+  const { data: manual } = await db.from('user_backups').select('id,user_id').eq('kind', 'manual').order('created_at', { ascending: false });
+  const seenM = new Map<string, number>();
+  for (const b of manual ?? []) {
+    const n = (seenM.get(b.user_id) ?? 0) + 1;
+    seenM.set(b.user_id, n);
+    if (n > 5) old.push(b.id);
+  }
+  if (old.length) await db.from('user_backups').delete().in('id', old);
 }
 
 /* ---------- 習慣の達成判定（アプリの core.js と同じ考え方） ---------- */

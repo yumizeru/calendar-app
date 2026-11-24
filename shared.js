@@ -32,7 +32,7 @@ const Shared = (() => {
       try {
         const [c, m, e] = await Promise.all([
           client().from('shared_calendars').select('id,name,color,owner,invite_code').order('created_at'),
-          client().from('shared_members').select('calendar_id,user_id,display_name'),
+          client().from('shared_members').select('calendar_id,user_id,display_name,notify'),
           client().from('shared_events').select('id,calendar_id,data,updated_at,updated_by'),
         ]);
         if (c.error || m.error || e.error) throw (c.error || m.error || e.error);
@@ -162,6 +162,10 @@ const Shared = (() => {
     card.hidden = !Cloud.session;
     if (!Cloud.session) return;
     if (document.activeElement !== $('#shName')) $('#shName').value = displayName();
+    // 通知のスイッチ：自分のメンバー情報のどれか1つでもオンならオン
+    const mine = state.members.filter(m => m.user_id === me());
+    $('#shNotify').checked = !mine.length || mine.some(m => m.notify !== false);
+    $('#shNotify').disabled = !mine.length;
     $('#sumShared').textContent = state.calendars.length
       ? state.calendars.map(c => c.name).join('・') + `（${state.calendars.length}個）`
       : 'まだありません（作る・参加する）';
@@ -202,6 +206,14 @@ const Shared = (() => {
       const code = $('#shCode').value.trim();
       if (!code) return;
       busy(e.submitter, async () => { const c = await join(code); $('#shCode').value = ''; App.toast(`「${c.name}」に参加しました`); });
+    });
+    $('#shNotify').addEventListener('change', e => {
+      const on = e.target.checked;
+      busy(null, async () => {
+        const { error } = await client().from('shared_members').update({ notify: on }).eq('user_id', me());
+        if (error) throw error;
+        await refresh();
+      }, on ? '家族の変更を通知します' : '家族の変更の通知をやめました');
     });
     $('#shName').addEventListener('change', e => {
       const v = e.target.value.trim().slice(0, 20);

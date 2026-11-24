@@ -147,6 +147,21 @@ const Theme = (() => {
     apply();
     renderPicker();
     if (typeof updateSettingsSummary === 'function') { try { updateSettingsSummary(); } catch {} }
+    if (typeof syncAppearance === 'function') { try { syncAppearance(); } catch {} }
+  }
+
+  // ウィジェット用の色（同期してウィジェットが読む）。「自動」のときは明るい・暗いの両方を渡す
+  function widgetColors() {
+    const { accentHex, baseId } = resolve();
+    const b = BASES[baseId];
+    if (b.tone === 'auto') {
+      return {
+        auto: true,
+        light: { bg: '#ffffff', text: '#1c1f27', muted: '#6b7280', accent: readableOn(accentHex, '#ffffff') },
+        dark: { bg: '#1d2028', text: '#e8eaf0', muted: '#9aa1ae', accent: readableOn(accentHex, '#1d2028') },
+      };
+    }
+    return { auto: false, bg: b.surface, text: b.text, muted: b.muted, accent: readableOn(accentHex, b.surface), tone: b.tone };
   }
 
   function label() {
@@ -219,5 +234,5 @@ const Theme = (() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 
-  return { label, apply, set, get current() { return current; } };
+  return { label, apply, set, widgetColors, get current() { return current; } };
 })();

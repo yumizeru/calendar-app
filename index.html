@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="21">
+  <meta name="app-version" content="22">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -55,6 +55,7 @@
           <h2 id="dayTitle"></h2>
           <button class="btn primary" id="addEvent"><i data-icon="plus"></i>予定</button>
         </div>
+        <div id="dayWeather"></div>
         <ul class="event-list" id="eventList"></ul>
         <div id="dayTodosWrap" hidden>
           <h3 class="sub">ToDo（この日まで）</h3>
@@ -145,6 +146,25 @@
         <p class="muted small">この端末だけの設定です（ほかの端末や共有相手には影響しません）。</p>
         </div>
       </details>
+      <details class="acc" id="accWeather">
+        <summary><span class="acc-ico"><i data-icon="cloud-sun"></i></span><span class="acc-text"><b>天気予報</b><small id="sumWeather"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
+        <div class="acc-body">
+          <label class="set-row toggle-row">
+            <span>カレンダーに天気を表示<small class="muted small">16日先まで。天気・最高/最低気温・降水確率</small></span>
+            <input type="checkbox" class="switch" id="wxOn">
+          </label>
+          <div id="wxBody" hidden>
+            <p class="muted small" id="wxPlace"></p>
+            <button class="btn" type="button" id="wxHere"><i data-icon="map-pin"></i>現在地を使う</button>
+            <form id="wxSearch" class="habit-form wx-search">
+              <input id="wxCity" type="text" placeholder="都市名でさがす（例：熊本市）" autocomplete="off">
+              <button class="btn primary" type="submit"><i data-icon="search"></i>さがす</button>
+            </form>
+            <ul class="search-list" id="wxResults"></ul>
+          </div>
+          <p class="muted small">天気は無料の天気サービス（Open-Meteo）から受け取ります。送るのは、だいたいの場所（約1km単位）だけです。</p>
+        </div>
+      </details>
       <div class="acc-row" id="helpCard">
         <button class="help-open" id="helpOpen">
           <span class="acc-ico"><i data-icon="book-open"></i></span>
@@ -186,6 +206,10 @@
         <div class="acc-body">
         <p class="muted">家族や友人と予定を共有できます。共有カレンダーに入れた予定だけが相手に見え、自分の予定・習慣・ToDoは見えません。</p>
         <label class="inline-field">あなたの表示名<input id="shName" type="text" maxlength="20" placeholder="例：ママ"></label>
+        <label class="set-row toggle-row">
+          <span>家族が予定を変えたら通知する<small class="muted small">共有カレンダーに予定が追加・変更・削除されたとき（通知をオンにした端末に届きます）</small></span>
+          <input type="checkbox" class="switch" id="shNotify">
+        </label>
         <ul class="shared-list" id="sharedList"></ul>
         <details class="sh-details">
           <summary>新しく作る</summary>
@@ -260,6 +284,13 @@
           <button class="btn" id="exportBtn">書き出す</button>
           <label class="btn">読み込む<input type="file" id="importFile" accept="application/json,.json" hidden></label>
         </div>
+        <h4 class="acc-sub">クラウドのバックアップ</h4>
+        <p class="muted" id="bkNote">毎週月曜の朝4時に、クラウドへ自動で保存します（新しい8回分を残します）。間違えて消したときは、ここから戻せます。</p>
+        <div id="bkBox" hidden>
+          <button class="btn" type="button" id="bkNow"><i data-icon="upload"></i>今すぐ保存する</button>
+          <ul class="backup-list" id="bkList"></ul>
+        </div>
+        <p class="muted small" id="bkLogin">クラウドのバックアップを使うには、「アカウントと同期」でログインしてください。</p>
         <h4 class="acc-sub danger-text">すべて削除</h4>
         <p class="muted">予定・習慣・記録をすべて消します。元に戻せません。</p>
         <button class="btn danger" id="resetBtn">すべて削除</button>
@@ -465,6 +496,7 @@
   <script src="icons.js"></script>
   <script src="holidays.js"></script>
   <script src="core.js"></script>
+  <script src="weather.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
   <script src="shared.js"></script>

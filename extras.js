@@ -167,3 +167,79 @@ const Report = (() => {
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   return { open };
 })();
+
+/* ---------- クラウドのバックアップ（週1回の自動・手動） ---------- */
+const Backup = (() => {
+  const $ = s => document.querySelector(s);
+  const fmt = iso => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}（${WD[d.getDay()]}）${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const client = () => (typeof Cloud !== 'undefined' ? Cloud.client : null);
+  const loggedIn = () => typeof Cloud !== 'undefined' && !!Cloud.session;
+
+  async function list() {
+    const box = $('#bkList');
+    box.innerHTML = '<li class="muted small">読み込んでいます…</li>';
+    const { data: rows, error } = await client().from('user_backups').select('id,kind,created_at').order('created_at', { ascending: false }).limit(15);
+    if (error) { box.innerHTML = '<li class="muted small">読み込めませんでした（ネット接続を確認してください）</li>'; return; }
+    box.innerHTML = rows.length ? rows.map(r => `<li><span>${fmt(r.created_at)}<small>　${r.kind === 'auto' ? '自動' : '手動'}</small></span>
+      <button class="btn small" data-restore="${r.id}">この時点に戻す</button></li>`).join('')
+      : '<li class="muted small">まだバックアップはありません。「今すぐ保存する」で作れます</li>';
+  }
+
+  async function saveNow(btn) {
+    btn.disabled = true;
+    try {
+      if (typeof Cloud !== 'undefined') await Cloud.sync(); // 最新の状態をそろえてから保存
+      const { error } = await client().from('user_backups').insert({ data: data, kind: 'manual' });
+      if (error) throw error;
+      App.toast('クラウドに保存しました');
+      await list();
+    } catch (e) {
+      console.warn(e);
+      App.toast('保存できませんでした（ネット接続を確認してください）');
+    } finally { btn.disabled = false; }
+  }
+
+  // 戻す：バックアップの中身を「いま」変更したことにして、ほかの端末にも行き渡らせる
+  async function restore(id) {
+    const { data: row, error } = await client().from('user_backups').select('data,created_at').eq('id', id).single();
+    if (error || !row) { App.toast('読み込めませんでした'); return; }
+    if (!confirm(`${fmt(row.created_at)} の状態に戻します。今のデータは、その時点の内容に置きかわります（同期している端末すべて）。よろしいですか？`)) return;
+    const now = Date.now();
+    const b = App.normalize(row.data);
+    const cur = App.normalize(data);
+    const touch = list => list.map(x => ({ ...x, updatedAt: now }));
+    const tomb = (curList, backList) => {
+      const ids = new Set(backList.map(x => x.id));
+      return curList.filter(x => !ids.has(x.id)).map(x => ({ id: x.id, deleted: true, updatedAt: now }));
+    };
+    const restored = {
+      ...b,
+      events: [...touch(b.events), ...tomb(cur.events, b.events)],
+      categories: [...touch(b.categories), ...tomb(cur.categories, b.categories)],
+      habits: [...touch(b.habits), ...tomb(cur.habits, b.habits)],
+      todos: [...touch(b.todos), ...tomb(cur.todos, b.todos)],
+      templates: [...touch(b.templates), ...tomb(cur.templates, b.templates)],
+      marks: {}, diary: {},
+      appearance: cur.appearance,
+    };
+    for (const k of new Set([...Object.keys(cur.marks), ...Object.keys(b.marks)])) restored.marks[k] = { ...(b.marks[k] || { on: false }), t: now };
+    for (const k of new Set([...Object.keys(cur.diary), ...Object.keys(b.diary)])) restored.diary[k] = { ...(b.diary[k] || { mood: 0, text: '' }), t: now };
+    App.replaceData(restored);
+    if (typeof Cloud !== 'undefined') Cloud.schedule(100);
+    App.toast('バックアップの時点に戻しました');
+  }
+
+  function render() {
+    const on = loggedIn();
+    $('#bkBox').hidden = !on;
+    $('#bkLogin').hidden = on;
+  }
+
+  $('#bkNow').addEventListener('click', e => saveNow(e.currentTarget));
+  $('#bkList').addEventListener('click', e => { const b = e.target.closest('[data-restore]'); if (b) restore(Number(b.dataset.restore)); });
+  // 「データの管理」を開いたときに一覧を読み込む
+  $('#dataCard').addEventListener('toggle', () => { render(); if ($('#dataCard').open && loggedIn()) list(); });
+  document.addEventListener('hibilog:auth', render);
+  render();
+  return { list, restore };
+})();

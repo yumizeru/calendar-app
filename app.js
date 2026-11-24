@@ -43,6 +43,8 @@ function normalize(d) {
   out.templates = (Array.isArray(d.templates) ? d.templates : [])
     .filter(x => x && x.id && (x.deleted || x.title))
     .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
+  // ウィジェットの色（テーマ）。どの端末で変えても、最後に変えたものを使う
+  if (d.appearance && typeof d.appearance === 'object') out.appearance = { ...d.appearance, t: num(d.appearance.t) };
   // ひとこと日記：{ "YYYY-MM-DD": { mood: 1〜5 か 0, text, t } }
   if (d.diary && typeof d.diary === 'object') {
     for (const [k, v] of Object.entries(d.diary)) {
@@ -100,6 +102,7 @@ function mergeData(a, b) {
     todos: byId(a.todos, b.todos),
     templates: byId(a.templates, b.templates),
     diary,
+    appearance: !a.appearance ? b.appearance : !b.appearance ? a.appearance : (b.appearance.t > a.appearance.t ? b.appearance : a.appearance),
   };
 }
 
@@ -220,6 +223,8 @@ function eventRow(o) {
   </li>`;
 }
 const dayOccurrences = day => Core.onDay(allEvents(), day);
+// 天気（weather.js）。オフのときや予報がない日は何も出さない
+const wx = (kind, s) => (typeof Weather !== 'undefined' ? Weather[kind](s) : '');
 // 誕生日はケーキ、記念日はハートのマーク
 const kindIcon = ev => (ev.kind === 'birthday' ? `<span class="kind-ico">${icon('cake')}</span>` : ev.kind === 'anniv' ? `<span class="kind-ico">${icon('heart')}</span>` : '');
 const evTitle = o => o.ev.title + Core.kindSuffix(o.ev, o.start);
@@ -286,7 +291,7 @@ function renderMonth() {
       hl = hol && !big ? `<span class="hol-name">${esc(hol)}</span>` : '';
     }
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
-      <span class="num">${d.getDate()}</span>${hl}<span class="edots">${evDots}</span><span class="dots">${hDots}</span></button>`;
+      ${wx('mini', s)}<span class="num">${d.getDate()}</span>${hl}<span class="edots">${evDots}</span><span class="dots">${hDots}</span></button>`;
   }
   $('#grid').innerHTML = html;
 }
@@ -312,7 +317,7 @@ function renderMonthColumn(y, m, byDay, todoCount, today, habits) {
     const extra = (todoCount[s] ? `<span class="mtag">${icon('square')}ToDo ${todoCount[s]}</span>` : '') + (hDots ? `<span class="mdots">${hDots}</span>` : '');
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${m + 1}月${i}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
       <span class="mdate"><b>${i}</b><small>${WD[d.getDay()]}</small>${(() => { const m = moodOf((diaryOf(s) || {}).mood); return m ? `<span class="mmood" style="color:${m.color}" title="${m.name}">${icon(m.icon)}</span>` : ''; })()}</span>
-      <span class="mbody">${hol ? `<span class="hol-badge">${esc(hol)}</span>` : ''}${lines}${extra ? `<span class="mextra">${extra}</span>` : ''}</span>
+      <span class="mbody">${wx('short', s)}${hol ? `<span class="hol-badge">${esc(hol)}</span>` : ''}${lines}${extra ? `<span class="mextra">${extra}</span>` : ''}</span>
     </button>`;
   }
   $('#monthCol').innerHTML = html;
@@ -353,6 +358,17 @@ function applyPrefs() {
   $('#prefFontTip').hidden = !(Number(prefs.font) > 1 && prefs.monthStyle !== 'column');
   if (typeof Updater !== 'undefined') updateSettingsSummary();
 }
+/* ========== ウィジェットの色をテーマに合わせる ========== */
+// テーマを変えたら、その色を同期データに入れる（ウィジェットが読む）
+function syncAppearance() {
+  if (typeof Theme === 'undefined') return;
+  const c = Theme.widgetColors();
+  const { t, ...cur } = data.appearance || {};
+  if (JSON.stringify(cur) === JSON.stringify(c)) return;
+  data.appearance = { ...c, t: Date.now() };
+  save();
+}
+
 /* ========== 設定：開いている項目の「閉じる」ボタン ========== */
 const openSettingsSections = () => [...document.querySelectorAll('#view-settings details.acc[open]')];
 // 項目を開いているときは、左上に×、タイトルにその項目の名前を出す
@@ -388,6 +404,7 @@ function updateSettingsSummary() {
   $('#sumView').textContent = `文字：${fontName} ・ 月表示：${styleName}${prefs.contrast ? ' ・ くっきり' : ''}`;
   $('#sumCat').textContent = `${activeCategories().length}個`;
   if (typeof Theme !== 'undefined') $('#sumTheme').textContent = Theme.label();
+  if (typeof Weather !== 'undefined') $('#sumWeather').textContent = Weather.summary();
   $('#sumAbout').textContent = `バージョン ${Updater.version}`;
   const loggedIn = typeof Cloud !== 'undefined' && !!Cloud.session;
   $('#widgetLoginNote').hidden = loggedIn;
@@ -418,7 +435,7 @@ function renderWeek() {
     const occ = dayOccurrences(s);
     const tds = activeTodos().filter(t => t.due === s).sort(todoSort);
     html += `<div class="ag-day${s === selected ? ' selected' : ''}${s === today ? ' is-today' : ''}" data-date="${s}">
-      <div class="ag-head${red ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getDate()}</b> ${WD[d.getDay()]}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}<button class="ag-add" data-add="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に予定を追加">＋</button></div>
+      <div class="ag-head${red ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getDate()}</b> ${WD[d.getDay()]}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}${wx('short', s)}<button class="ag-add" data-add="${s}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に予定を追加">＋</button></div>
       <ul class="event-list">${occ.length ? occ.map(o => eventRow({ ...o, day: s })).join('') : (tds.length ? '' : '<li class="empty">予定なし</li>')}</ul>
       ${tds.length ? `<ul class="todo-list compact">${tds.map(t => todoRow(t, { hideDue: true })).join('')}</ul>` : ''}
     </div>`;
@@ -452,7 +469,7 @@ function renderList() {
     const list = (byDay[s] || []).sort((x, y) => ((x.ev.time || '') + x.ev.title).localeCompare((y.ev.time || '') + y.ev.title));
     const tds = (todoByDay[s] || []).sort(todoSort);
     html += `<div class="ag-day" data-date="${s}">
-      <div class="ag-head${d.getDay() === 0 || hol ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getMonth() + 1}/${d.getDate()}</b> ${WD[d.getDay()]}${s === from ? ' <span class="today-badge">今日</span>' : ''}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}</div>
+      <div class="ag-head${d.getDay() === 0 || hol ? ' red' : d.getDay() === 6 ? ' blue' : ''}"><b>${d.getMonth() + 1}/${d.getDate()}</b> ${WD[d.getDay()]}${s === from ? ' <span class="today-badge">今日</span>' : ''}${hol ? ` <span class="hol-badge">${esc(hol)}</span>` : ''}${wx('short', s)}</div>
       ${list.length ? `<ul class="event-list">${list.map(o => eventRow(o)).join('')}</ul>` : ''}
       ${tds.length ? `<ul class="todo-list compact">${tds.map(t => todoRow(t, { hideDue: t.due === s })).join('')}</ul>` : ''}
     </div>`;
@@ -466,6 +483,7 @@ function renderDay() {
   const hol = JPHolidays.get(selected);
   $('#dayTitle').innerHTML = `${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）` +
     (hol ? ` <span class="hol-badge">${esc(hol)}</span>` : '');
+  $('#dayWeather').innerHTML = wx('line', selected);
   const occ = dayOccurrences(selected);
   $('#eventList').innerHTML = occ.length
     ? occ.map(o => eventRow(o)).join('')
@@ -1476,6 +1494,7 @@ const Updater = (() => {
 /* ========== 起動 ========== */
 applyPrefs();
 render();
+if (!data.appearance) syncAppearance();
 // 日付が変わったら「今日」表示を更新
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !dlg.open) render(); });
 Updater.start();
