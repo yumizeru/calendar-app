@@ -304,7 +304,7 @@ function build(v, stale) {
   }
   if (fam === 'accessoryRectangular') {
     w.addAccessoryWidgetBackground = true;
-    text(w, '📅 ひびログ', 11, null, true);
+    text(w, 'ひびログ', 11, null, true);
     if (next) text(w, `${next.date === v.today ? '' : md(parseYmd(next.date)) + ' '}${next.time || '終日'} ${next.title}`, 12);
     else text(w, '予定なし', 12);
     const hs = habitSummary(v);

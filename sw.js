@@ -1,11 +1,13 @@
 // オフラインでも開けるようにファイルをキャッシュする
 // 更新するときは index.html の app-version と version.json も同じ番号にそろえる
-const VERSION = 'hibilog-v18';
+const VERSION = 'hibilog-v19';
 const SUPABASE_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js';
 const FILES = [
   './',
   './index.html',
   './style.css',
+  './icons.js',
+  './theme.js',
   './holidays.js',
   './core.js',
   './app.js',

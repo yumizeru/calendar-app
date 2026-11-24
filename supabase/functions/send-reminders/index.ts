@@ -89,7 +89,7 @@ async function runDue() {
   let sent = 0, skipped = 0;
   const errors: string[] = [];
   for (const r of due) {
-    let title = `🔔 ${r.title}`, body = r.body;
+    let title = r.title, body = r.body;
     if (r.event_id.startsWith('habit:')) {
       const status = habitStatus(dataByUser.get(r.user_id), r.event_id);
       if (!status || status.done) { skipped++; continue; }
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         if (body?.test) {
           const subs = await subsFor([user.id]);
           if (!subs.length) return json({ ok: 0, error: 'この人の通知登録がありません' }, 404);
-          const res = await sendTo(subs, { title: '🔔 ひびログ', body: 'テスト通知です。リマインダーはこのように届きます。', url: APP_URL });
+          const res = await sendTo(subs, { title: 'ひびログ', body: 'テスト通知です。リマインダーはこのように届きます。', url: APP_URL });
           return json(res);
         }
         return json({ error: 'bad request' }, 400);

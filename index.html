@@ -10,18 +10,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="18">
+  <meta name="app-version" content="19">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <button class="icon-btn" id="prevMonth" aria-label="前の月">‹</button>
+    <button class="icon-btn" id="prevMonth" aria-label="前の月"><i data-icon="chevron-left"></i></button>
     <button class="month-title" id="monthTitle" aria-label="今日に戻る"></button>
-    <button class="icon-btn" id="nextMonth" aria-label="次の月">›</button>
+    <button class="icon-btn" id="nextMonth" aria-label="次の月"><i data-icon="chevron-right"></i></button>
   </header>
 
   <main>
@@ -46,7 +47,7 @@
       <div class="day-panel" id="dayPanel">
         <div class="day-head">
           <h2 id="dayTitle"></h2>
-          <button class="btn primary" id="addEvent">＋ 予定</button>
+          <button class="btn primary" id="addEvent"><i data-icon="plus"></i>予定</button>
         </div>
         <ul class="event-list" id="eventList"></ul>
         <div id="dayTodosWrap" hidden>
@@ -74,7 +75,7 @@
     <section class="view" id="view-habits" hidden>
       <div class="ag-toolbar">
         <span class="muted small">上の ‹ › で達成率の月を切り替え</span>
-        <button class="btn primary" id="addHabit">＋ 習慣を追加</button>
+        <button class="btn primary" id="addHabit"><i data-icon="plus"></i>習慣を追加</button>
       </div>
       <ul class="habit-list" id="habitList"></ul>
     </section>
@@ -83,8 +84,27 @@
     <section class="view" id="view-settings" hidden>
       <!-- 各項目はタップで開く。閉じているときも右側に今の状態を出す -->
       <div class="set-group">
+      <details class="acc" id="accTheme">
+        <summary><span class="acc-ico"><i data-icon="palette"></i></span><span class="acc-text"><b>テーマ（色）</b><small id="sumTheme"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
+        <div class="acc-body">
+          <p class="muted">アプリ全体の色を変えられます。おすすめの組み合わせから選ぶか、下の「自分で組み合わせる」でアクセントの色と背景を自由に選べます。</p>
+          <div id="themePresets"></div>
+          <h4 class="acc-sub">自分で組み合わせる</h4>
+          <p class="muted small">今のテーマ：<b id="themeCurrent"></b></p>
+          <div class="set-row">
+            <span>アクセントの色（ボタン・今日の印など）</span>
+            <div class="ac-grid" id="themeAccents"></div>
+            <label class="inline-field free-color">好きな色を選ぶ<input type="color" id="themeAccentFree" value="#4f7cff"></label>
+          </div>
+          <div class="set-row">
+            <span>背景の色合い</span>
+            <div class="tp-grid" id="themeBases"></div>
+          </div>
+          <p class="muted small">この端末だけの設定です。</p>
+        </div>
+      </details>
       <details class="acc" id="accView">
-        <summary><span class="acc-ico">🔎</span><span class="acc-text"><b>見やすさ・表示</b><small id="sumView"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="eye"></i></span><span class="acc-text"><b>見やすさ・表示</b><small id="sumView"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <div class="set-row">
           <span>月表示のスタイル</span>
@@ -103,7 +123,7 @@
             <button class="seg-btn" data-v="1.36">とても大きい</button>
           </div>
           <div class="tip" id="prefFontTip" hidden>
-            <p>💡 文字を大きくすると、月のカレンダーは数字と予定の件数だけの見やすい形になります。予定の名前まで大きな文字で読みたいときは、<b>「1列」表示</b>がおすすめです。</p>
+            <p><i data-icon="lightbulb"></i> 文字を大きくすると、月のカレンダーは数字と予定の件数だけの見やすい形になります。予定の名前まで大きな文字で読みたいときは、<b>「1列」表示</b>がおすすめです。</p>
             <button class="btn small primary" id="prefUseColumn">「1列」表示にする</button>
           </div>
         </div>
@@ -116,16 +136,16 @@
       </details>
       <div class="acc-row" id="helpCard">
         <button class="help-open" id="helpOpen">
-          <span class="acc-ico">📖</span>
+          <span class="acc-ico"><i data-icon="book-open"></i></span>
           <span class="acc-text"><b>使い方・ヘルプ</b><small>使い方の説明・画面での案内</small></span>
-          <span class="acc-chev">›</span>
+          <span class="acc-chev"><i data-icon="chevron-right"></i></span>
         </button>
       </div>
       </div>
 
       <div class="set-group">
       <details class="acc" id="cloudCard">
-        <summary><span class="acc-ico">☁️</span><span class="acc-text"><b>アカウントと同期</b><small id="sumCloud"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="cloud"></i></span><span class="acc-text"><b>アカウントと同期</b><small id="sumCloud"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <div id="cloudOut">
           <p class="muted">ログインすると、iPhoneとPCなど複数の端末で同じデータを使えます。リマインダー通知やウィジェットにもログインが必要です。</p>
@@ -151,7 +171,7 @@
         </div>
       </details>
       <details class="acc" id="sharedCard" hidden>
-        <summary><span class="acc-ico">👥</span><span class="acc-text"><b>家族と共有（共有カレンダー）</b><small id="sumShared"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="users"></i></span><span class="acc-text"><b>家族と共有（共有カレンダー）</b><small id="sumShared"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <p class="muted">家族や友人と予定を共有できます。共有カレンダーに入れた予定だけが相手に見え、自分の予定・習慣・ToDoは見えません。</p>
         <label class="inline-field">あなたの表示名<input id="shName" type="text" maxlength="20" placeholder="例：ママ"></label>
@@ -174,7 +194,7 @@
         </div>
       </details>
       <details class="acc" id="pushCard" hidden>
-        <summary><span class="acc-ico">🔔</span><span class="acc-text"><b>通知（リマインダー）</b><small id="sumPush"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="bell"></i></span><span class="acc-text"><b>通知（リマインダー）</b><small id="sumPush"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <p class="muted" id="pushStatus"></p>
         <div class="row">
@@ -188,7 +208,7 @@
 
       <div class="set-group">
       <details class="acc" id="homeCard">
-        <summary><span class="acc-ico">📱</span><span class="acc-text"><b>ホーム画面（アプリ・ウィジェット）</b><small>ホーム画面に追加・ウィジェット</small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="smartphone"></i></span><span class="acc-text"><b>ホーム画面（アプリ・ウィジェット）</b><small>ホーム画面に追加・ウィジェット</small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <h4 class="acc-sub">アプリのようにホーム画面に置く</h4>
         <p class="muted">iPhoneのSafariでこのページを開き、共有ボタン（□に↑）→「ホーム画面に追加」でアプリのように使えます。通知を受け取るにも必要です。</p>
@@ -206,7 +226,7 @@
         </div>
       </details>
       <details class="acc" id="catCard">
-        <summary><span class="acc-ico">🎨</span><span class="acc-text"><b>カテゴリ（予定の色分け）</b><small id="sumCat"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="swatch-book"></i></span><span class="acc-text"><b>カテゴリ（予定の色分け）</b><small id="sumCat"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <p class="muted">予定の色分けに使います。名前と色を変えたり、増やしたりできます。</p>
         <ul class="cat-list" id="catList"></ul>
@@ -221,7 +241,7 @@
 
       <div class="set-group">
       <details class="acc" id="dataCard">
-        <summary><span class="acc-ico">💾</span><span class="acc-text"><b>データの管理</b><small>バックアップ・すべて削除</small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="database"></i></span><span class="acc-text"><b>データの管理</b><small>バックアップ・すべて削除</small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <h4 class="acc-sub">バックアップ</h4>
         <p class="muted">データはこの端末に保存されます（ログイン中はクラウドにも保存）。念のため、ときどき書き出しておくと安心です。</p>
@@ -235,7 +255,7 @@
         </div>
       </details>
       <details class="acc" id="aboutCard">
-        <summary><span class="acc-ico">ℹ️</span><span class="acc-text"><b>アプリについて</b><small id="sumAbout"></small></span><span class="acc-chev">›</span></summary>
+        <summary><span class="acc-ico"><i data-icon="info"></i></span><span class="acc-text"><b>アプリについて</b><small id="sumAbout"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
         <p class="muted">バージョン <b id="appVersion"></b>。新しい版が出ると、アプリを開いたときに自動で更新されます。</p>
         <button class="btn" id="checkUpdate">今すぐ更新を確認</button>
@@ -246,10 +266,10 @@
   </main>
 
   <nav class="tabbar">
-    <button class="tab active" data-view="calendar"><span class="tab-ico">📅</span>カレンダー</button>
-    <button class="tab" data-view="habits"><span class="tab-ico">✅</span>習慣</button>
-    <button class="tab" data-view="todos"><span class="tab-ico">📝</span>ToDo<span class="tab-badge" id="todoBadge" hidden></span></button>
-    <button class="tab" data-view="settings"><span class="tab-ico">⚙️</span>設定</button>
+    <button class="tab active" data-view="calendar"><span class="tab-ico"><i data-icon="calendar"></i></span>カレンダー</button>
+    <button class="tab" data-view="habits"><span class="tab-ico"><i data-icon="list-checks"></i></span>習慣</button>
+    <button class="tab" data-view="todos"><span class="tab-ico"><i data-icon="list-todo"></i></span>ToDo<span class="tab-badge" id="todoBadge" hidden></span></button>
+    <button class="tab" data-view="settings"><span class="tab-ico"><i data-icon="settings"></i></span>設定</button>
   </nav>
 
   <dialog id="eventDialog">
@@ -314,7 +334,7 @@
       <label>やること<input id="tTitle" type="text" maxlength="80" required></label>
       <div class="row">
         <label>期限<input id="tDue" type="date"></label>
-        <label class="check-row"><input id="tStar" type="checkbox"> ★ 重要</label>
+        <label class="check-row"><input id="tStar" type="checkbox"> <i data-icon="star"></i> 重要</label>
       </div>
       <label>メモ<textarea id="tMemo" rows="3" maxlength="500"></textarea></label>
       <div class="row end">
@@ -375,17 +395,17 @@
   <dialog id="helpDialog" class="help-dialog">
     <div class="help-head">
       <h3 id="helpTitle"></h3>
-      <button class="icon-btn" id="helpClose" aria-label="とじる">✕</button>
+      <button class="icon-btn" id="helpClose" aria-label="とじる"><i data-icon="x"></i></button>
     </div>
     <div class="help-body" id="helpListView">
-      <p class="muted">知りたいことをタップすると、説明が読めます。「📍」の付いたものは、画面を照らして案内もできます。</p>
+      <p class="muted">知りたいことをタップすると、説明が読めます。<i data-icon="map-pin"></i> の付いたものは、画面を照らして案内もできます。</p>
       <ul class="help-list" id="helpList"></ul>
     </div>
     <div class="help-body" id="helpBody" hidden></div>
     <div class="row end help-foot" id="helpFoot" hidden>
       <button class="btn" id="helpBack">‹ 一覧にもどる</button>
       <span class="spacer"></span>
-      <button class="btn primary" id="helpTour" hidden>📍 画面で案内する</button>
+      <button class="btn primary" id="helpTour" hidden><i data-icon="map-pin"></i> 画面で案内する</button>
     </div>
   </dialog>
 
@@ -402,6 +422,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+  <script src="icons.js"></script>
   <script src="holidays.js"></script>
   <script src="core.js"></script>
   <script src="app.js"></script>

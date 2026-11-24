@@ -1,5 +1,8 @@
 'use strict';
 
+// HTML に書いたアイコンの目印（<i data-icon="...">）を本物のアイコンにする
+hydrateIcons();
+
 /* =====================================================================
  * データ
  *  events     : 予定（形は core.js の説明を参照）
@@ -164,10 +167,10 @@ function monthRate(h, month) {
 /* ========== 予定の行（日パネル・週・リストで共通） ========== */
 function eventRow(o) {
   const ev = o.ev;
-  const bell = ev.remind != null && ev.remind !== '' ? ' <span class="bell" title="リマインダー">🔔</span>' : '';
-  const rep = ev.repeat ? ' <span class="rep" title="繰り返し">🔁</span>' : '';
+  const bell = ev.remind != null && ev.remind !== '' ? ` <span class="bell" title="リマインダー">${icon('bell')}</span>` : '';
+  const rep = ev.repeat ? ` <span class="rep" title="繰り返し">${icon('repeat')}</span>` : '';
   const sc = sharedCal(ev);
-  const shared = sc ? ` <span class="shared-tag">👥 ${esc(sc.name)}</span>` : '';
+  const shared = sc ? ` <span class="shared-tag">${icon('users')}${esc(sc.name)}</span>` : '';
   return `<li data-id="${esc(ev.id)}" data-occ="${esc(o.start)}" style="--c:${esc(colorOf(ev))}">
     <span class="cbar"></span>
     <span class="time">${esc(Core.timeLabel(o))}</span>
@@ -220,7 +223,7 @@ function renderMonth() {
     if (big && style !== 'titles') {
       // 大きい文字：小さな点や祝日名は読めないので出さず、件数だけを大きめに出す（詳しくは下の日パネルで）
       evDots = (evs.length ? `<span class="ecount" style="--c:${esc(colorOf(evs[0].ev))}">${evs.length}件</span>` : '') +
-        (todoCount[s] ? `<span class="tcount">☐${todoCount[s]}</span>` : '');
+        (todoCount[s] ? `<span class="tcount">${icon('square')}${todoCount[s]}</span>` : '');
       hDots = '';
       hl = '';
     } else {
@@ -229,7 +232,7 @@ function renderMonth() {
       evDots = style === 'titles'
         ? evs.slice(0, maxChips).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(o.ev.title)}</span>`).join('') +
           (evs.length > maxChips ? `<span class="more">+${evs.length - maxChips}</span>` : '') +
-          (todoCount[s] ? `<span class="tchip">☐${todoCount[s]}</span>` : '')
+          (todoCount[s] ? `<span class="tchip">${icon('square')}${todoCount[s]}</span>` : '')
         : evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
           (evs.length > 4 ? `<span class="more">+${evs.length - 4}</span>` : '') +
           (todoCount[s] ? `<span class="tdot" title="ToDo ${todoCount[s]}件"></span>` : '');
@@ -261,7 +264,7 @@ function renderMonthColumn(y, m, byDay, todoCount, today, habits) {
     const lines = evs.slice(0, 4).map(o => `<span class="mline" style="--c:${esc(colorOf(o.ev))}"><i></i><span class="t">${esc(Core.timeLabel(o))}</span><span class="tt">${esc(o.ev.title)}</span></span>`).join('') +
       (evs.length > 4 ? `<span class="mline more-line">ほか${evs.length - 4}件</span>` : '');
     const hDots = habits.filter(h => isDoneOn(h, s)).map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
-    const extra = (todoCount[s] ? `<span class="mtag">☐ ToDo ${todoCount[s]}</span>` : '') + (hDots ? `<span class="mdots">${hDots}</span>` : '');
+    const extra = (todoCount[s] ? `<span class="mtag">${icon('square')}ToDo ${todoCount[s]}</span>` : '') + (hDots ? `<span class="mdots">${hDots}</span>` : '');
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${m + 1}月${i}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
       <span class="mdate"><b>${i}</b><small>${WD[d.getDay()]}</small></span>
       <span class="mbody">${hol ? `<span class="hol-badge">${esc(hol)}</span>` : ''}${lines}${extra ? `<span class="mextra">${extra}</span>` : ''}</span>
@@ -311,6 +314,7 @@ function updateSettingsSummary() {
   const styleName = { dots: 'シンプル', titles: '予定名', column: '1列' }[prefs.monthStyle] || 'シンプル';
   $('#sumView').textContent = `文字：${fontName} ・ 月表示：${styleName}${prefs.contrast ? ' ・ くっきり' : ''}`;
   $('#sumCat').textContent = `${activeCategories().length}個`;
+  if (typeof Theme !== 'undefined') $('#sumTheme').textContent = Theme.label();
   $('#sumAbout').textContent = `バージョン ${Updater.version}`;
   const loggedIn = typeof Cloud !== 'undefined' && !!Cloud.session;
   $('#widgetLoginNote').hidden = loggedIn;
@@ -459,7 +463,7 @@ function renderHabits() {
         }).join('');
         const tags = [Core.freqLabel(h)];
         if (num) tags.push(`目標 ${Core.fmtNum(h.target.value)}${h.target.unit || ''}`);
-        if (h.remindAt) tags.push(`🔔 ${h.remindAt}`);
+        if (h.remindAt) tags.push(`通知 ${h.remindAt}`);
         const weekly = Core.freqOf(h).type === 'weekly';
         const open = openHabitStats.has(h.id);
         return `<li>
@@ -594,7 +598,7 @@ function fillCalendarSelect(value) {
   const cals = hasShared() && Cloud.session ? Shared.calendars() : [];
   $('#evCalRow').hidden = !cals.length;
   $('#evCal').innerHTML = '<option value="">自分だけ</option>' +
-    cals.map(c => `<option value="${esc(c.id)}">👥 ${esc(c.name)}</option>`).join('');
+    cals.map(c => `<option value="${esc(c.id)}">共有：${esc(c.name)}</option>`).join('');
   $('#evCal').value = value && cals.some(c => c.id === value) ? value : '';
   syncCalUi();
 }
@@ -610,7 +614,7 @@ function openEvent(id, occStart, newDate) {
   if (ev && ev.calendarId) {
     const who = Shared.memberName(ev.calendarId, ev.updatedBy);
     const when = ev.sharedUpdatedAt ? new Date(ev.sharedUpdatedAt) : null;
-    info.textContent = `👥 共有の予定${who ? ` ・ 最後に変更：${who}` : ''}${when ? `（${when.getMonth() + 1}/${when.getDate()} ${pad(when.getHours())}:${pad(when.getMinutes())}）` : ''}`;
+    info.innerHTML = icon('users') + esc(`共有の予定${who ? ` ・ 最後に変更：${who}` : ''}${when ? `（${when.getMonth() + 1}/${when.getDate()} ${pad(when.getHours())}:${pad(when.getMinutes())}）` : ''}`);
   }
   const start = ev ? (occStart || ev.date) : (newDate || selected);
   const dur = ev ? Core.duration(ev) : 0;
@@ -996,7 +1000,7 @@ function todoRow(t, { hideDue = false } = {}) {
   const overdue = !t.done && t.due && t.due < todayStr();
   return `<li class="todo${t.done ? ' done' : ''}" data-todo="${esc(t.id)}">
     <input type="checkbox" class="check" data-todo-check="${esc(t.id)}" ${t.done ? 'checked' : ''} aria-label="${esc(t.title)}を完了">
-    <span class="ttitle">${t.star ? '<span class="star">★</span>' : ''}${esc(t.title)}${t.memo ? `<span class="memo">${esc(t.memo)}</span>` : ''}</span>
+    <span class="ttitle">${t.star ? `<span class="star">${icon('star')}</span>` : ''}${esc(t.title)}${t.memo ? `<span class="memo">${esc(t.memo)}</span>` : ''}</span>
     ${t.due && !hideDue ? `<span class="tdue${overdue ? ' overdue' : ''}">${esc(dueLabel(t.due))}</span>` : ''}
   </li>`;
 }
@@ -1025,7 +1029,7 @@ function renderTodos() {
     html += `<div class="card todo-group ${cls}"><h3>${name}<span class="count">${list.length}</span></h3>
       <ul class="todo-list">${list.map(t => todoRow(t, { hideDue: name === '今日' })).join('')}</ul></div>`;
   }
-  if (!open.length) html += '<p class="empty center">やることはありません 🎉<br>上の欄から追加できます</p>';
+  if (!open.length) html += `<p class="empty center">${icon('sparkles', 'big')}<br>やることはありません<br>上の欄から追加できます</p>`;
   const done = all.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   if (done.length) {
     html += `<div class="card todo-group donegrp"><h3>

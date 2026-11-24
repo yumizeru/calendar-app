@@ -137,7 +137,7 @@ const Cloud = (() => {
         let body = 'まだ記録がありません';
         if (Core.isNumeric(h)) body = `今日の目標 ${Core.fmtNum(h.target.value)}${h.target.unit || ''}`;
         if (Core.freqOf(h).type === 'weekly') body = `今週 ${Core.weekCount(h, d.marks, s)}/${Core.weekNeed(h)}回`;
-        items.push({ event_id: `habit:${h.id}@${s}`, fire_at: new Date(fire).toISOString(), title: `✅ ${h.name}`, body });
+        items.push({ event_id: `habit:${h.id}@${s}`, fire_at: new Date(fire).toISOString(), title: `習慣：${h.name}`, body });
       }
     }
     items.sort((a, b) => a.fire_at.localeCompare(b.fire_at));

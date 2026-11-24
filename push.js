@@ -89,7 +89,7 @@ const Push = (() => {
     }
     const sub = await currentSub().catch(() => null);
     if (sub && Notification.permission === 'granted') {
-      status.textContent = 'この端末で通知オン。🔔を付けた予定の時刻にお知らせします。';
+      status.textContent = 'この端末で通知オン。リマインダーを設定した予定や習慣の時刻にお知らせします。';
       show(false, true, true);
       saveSub(sub).catch(() => {}); // 念のため登録を最新にしておく
     } else {
