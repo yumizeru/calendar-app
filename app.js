@@ -18,7 +18,7 @@ const DEFAULT_CATEGORIES = [
   { id: 'cat-private', name: 'プライベート', color: '#22c55e', updatedAt: 0 },
   { id: 'cat-errand', name: '用事・通院', color: '#f59e0b', updatedAt: 0 },
 ];
-const emptyData = () => ({ version: 4, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {}, todos: [] });
+const emptyData = () => ({ version: 5, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {}, todos: [], templates: [], diary: {} });
 
 function normalize(d) {
   const out = emptyData();
@@ -39,6 +39,18 @@ function normalize(d) {
   out.todos = (Array.isArray(d.todos) ? d.todos : [])
     .filter(x => x && x.id && (x.deleted || x.title))
     .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
+  // 予定のテンプレ：[{ id, title, time, endTime, categoryId, remind, updatedAt, deleted? }]
+  out.templates = (Array.isArray(d.templates) ? d.templates : [])
+    .filter(x => x && x.id && (x.deleted || x.title))
+    .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
+  // ひとこと日記：{ "YYYY-MM-DD": { mood: 1〜5 か 0, text, t } }
+  if (d.diary && typeof d.diary === 'object') {
+    for (const [k, v] of Object.entries(d.diary)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v && typeof v === 'object') {
+        out.diary[k] = { mood: Math.max(0, Math.min(5, Number(v.mood) || 0)), text: String(v.text || '').slice(0, 300), t: num(v.t) };
+      }
+    }
+  }
   if (d.marks && typeof d.marks === 'object') {
     for (const [k, v] of Object.entries(d.marks)) {
       if (v && typeof v === 'object') {
@@ -75,13 +87,19 @@ function mergeData(a, b) {
   for (const [k, v] of Object.entries(b.marks)) {
     if (!marks[k] || v.t > marks[k].t) marks[k] = v;
   }
+  const diary = { ...a.diary };
+  for (const [k, v] of Object.entries(b.diary)) {
+    if (!diary[k] || v.t > diary[k].t) diary[k] = v;
+  }
   return {
-    version: 4,
+    version: 5,
     events: byId(a.events, b.events),
     categories: byId(a.categories, b.categories),
     habits: byId(a.habits, b.habits),
     marks,
     todos: byId(a.todos, b.todos),
+    templates: byId(a.templates, b.templates),
+    diary,
   };
 }
 
@@ -135,15 +153,39 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const habitById = id => data.habits.find(h => h.id === id && !h.deleted);
 const isDoneOn = (h, s) => Core.doneOn(h, data.marks, s);
 function toggleCheck(date, hid) {
+  const h = habitById(hid);
+  const before = h ? Core.streak(h, data.marks, todayStr()).n : 0;
   const m = Core.markOf(data.marks, date, hid);
   data.marks[`${date}|${hid}`] = { on: !(m && m.on), t: Date.now() };
   save();
+  if (h) celebrate(h, before);
 }
 function setValue(date, h, v) {
   const num = v === '' || v == null ? null : Number(v);
   if (num != null && !isFinite(num)) return;
+  const before = Core.streak(h, data.marks, todayStr()).n;
   data.marks[`${date}|${h.id}`] = { on: num != null && num >= Number(h.target.value), v: num, t: Date.now() };
   save();
+  celebrate(h, before);
+}
+// 連続記録がバッジの区切り（3・7・14・30…）に届いたら、お祝いを出す
+function celebrate(h, before) {
+  const st = Core.streak(h, data.marks, todayStr());
+  if (st.n > before && Core.BADGE_STEPS.includes(st.n)) {
+    setTimeout(() => toast(`「${h.name}」${st.n}${st.unit}連続！バッジを手に入れました`), 50);
+  }
+}
+// 習慣カードのバッジ欄：手に入れたバッジと、次のバッジまでの残り
+function badgeHtml(h) {
+  const today = todayStr();
+  const best = Core.bestStreak(h, data.marks, today);
+  const cur = Core.streak(h, data.marks, today);
+  const got = Core.BADGE_STEPS.filter(n => n <= best.n);
+  // 次は「まだ持っていないバッジ」。今の連続からの残り日数を出す
+  const next = Core.BADGE_STEPS.find(n => n > Math.max(best.n, cur.n));
+  const chips = got.map(n => `<span class="badge${n === got[got.length - 1] ? ' top' : ''}" title="${n}${best.unit}連続">${icon(n >= 100 ? 'trophy' : n >= 30 ? 'medal' : 'award')}${n}${best.unit}</span>`).join('');
+  const nextText = next ? `次のバッジ（${next}${cur.unit}）まで あと${next - cur.n}${cur.unit}` : 'すべてのバッジを手に入れました';
+  return `<div class="badges">${chips || `<span class="muted small">まだバッジはありません</span>`}<span class="badge-next">${nextText}</span></div>`;
 }
 // 数値の習慣は入力欄、チェックの習慣は切り替え
 function recordHabit(h, date) {
@@ -174,10 +216,13 @@ function eventRow(o) {
   return `<li data-id="${esc(ev.id)}" data-occ="${esc(o.start)}" style="--c:${esc(colorOf(ev))}">
     <span class="cbar"></span>
     <span class="time">${esc(Core.timeLabel(o))}</span>
-    <span class="title">${esc(ev.title)}${rep}${bell}${shared}${ev.memo ? `<span class="memo">${esc(ev.memo)}</span>` : ''}</span>
+    <span class="title">${kindIcon(ev)}${esc(ev.title + Core.kindSuffix(ev, o.start))}${rep}${bell}${shared}${ev.memo ? `<span class="memo">${esc(ev.memo)}</span>` : ''}</span>
   </li>`;
 }
 const dayOccurrences = day => Core.onDay(allEvents(), day);
+// 誕生日はケーキ、記念日はハートのマーク
+const kindIcon = ev => (ev.kind === 'birthday' ? `<span class="kind-ico">${icon('cake')}</span>` : ev.kind === 'anniv' ? `<span class="kind-ico">${icon('heart')}</span>` : '');
+const evTitle = o => o.ev.title + Core.kindSuffix(o.ev, o.start);
 
 /* ========== 描画：月 ========== */
 function renderMonth() {
@@ -230,7 +275,7 @@ function renderMonth() {
       // 「予定名」スタイルは色付きの帯にタイトルを出す。「シンプル」は色の点だけ
       const maxChips = big ? 2 : 3;
       evDots = style === 'titles'
-        ? evs.slice(0, maxChips).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(o.ev.title)}</span>`).join('') +
+        ? evs.slice(0, maxChips).map(o => `<span class="echip" style="--c:${esc(colorOf(o.ev))}">${esc(evTitle(o))}</span>`).join('') +
           (evs.length > maxChips ? `<span class="more">+${evs.length - maxChips}</span>` : '') +
           (todoCount[s] ? `<span class="tchip">${icon('square')}${todoCount[s]}</span>` : '')
         : evs.slice(0, 4).map(o => `<span class="edot" style="background:${esc(colorOf(o.ev))}"></span>`).join('') +
@@ -258,15 +303,15 @@ function renderMonthColumn(y, m, byDay, todoCount, today, habits) {
     if (d.getDay() === 0 || hol) cls.push('red'); else if (d.getDay() === 6) cls.push('blue');
     if (s === today) cls.push('today');
     if (s === selected) cls.push('selected');
-    if (s !== today && s !== selected && !(byDay[s] || []).length && !todoCount[s] && !hol && !habits.some(h => isDoneOn(h, s))) cls.push('blank');
+    if (s !== today && s !== selected && !(byDay[s] || []).length && !todoCount[s] && !hol && !habits.some(h => isDoneOn(h, s)) && !(diaryOf(s) || {}).mood) cls.push('blank');
     const evs = (byDay[s] || []).map(o => ({ ...o, day: s }))
       .sort((a, b) => ((a.start < s ? '' : (a.ev.time || '')) + a.ev.title).localeCompare((b.start < s ? '' : (b.ev.time || '')) + b.ev.title));
-    const lines = evs.slice(0, 4).map(o => `<span class="mline" style="--c:${esc(colorOf(o.ev))}"><i></i><span class="t">${esc(Core.timeLabel(o))}</span><span class="tt">${esc(o.ev.title)}</span></span>`).join('') +
+    const lines = evs.slice(0, 4).map(o => `<span class="mline" style="--c:${esc(colorOf(o.ev))}"><i></i><span class="t">${esc(Core.timeLabel(o))}</span><span class="tt">${esc(evTitle(o))}</span></span>`).join('') +
       (evs.length > 4 ? `<span class="mline more-line">ほか${evs.length - 4}件</span>` : '');
     const hDots = habits.filter(h => isDoneOn(h, s)).map(h => `<span class="dot" style="background:${esc(h.color)}"></span>`).join('');
     const extra = (todoCount[s] ? `<span class="mtag">${icon('square')}ToDo ${todoCount[s]}</span>` : '') + (hDots ? `<span class="mdots">${hDots}</span>` : '');
     html += `<button class="${cls.join(' ')}" data-date="${s}" aria-label="${m + 1}月${i}日${hol ? ' ' + esc(hol) : ''}${evs.length ? ` 予定${evs.length}件` : ''}">
-      <span class="mdate"><b>${i}</b><small>${WD[d.getDay()]}</small></span>
+      <span class="mdate"><b>${i}</b><small>${WD[d.getDay()]}</small>${(() => { const m = moodOf((diaryOf(s) || {}).mood); return m ? `<span class="mmood" style="color:${m.color}" title="${m.name}">${icon(m.icon)}</span>` : ''; })()}</span>
       <span class="mbody">${hol ? `<span class="hol-badge">${esc(hol)}</span>` : ''}${lines}${extra ? `<span class="mextra">${extra}</span>` : ''}</span>
     </button>`;
   }
@@ -434,7 +479,52 @@ function renderDay() {
   $('#habitChecks').innerHTML = habits.length
     ? habits.map(h => habitDayRow(h, selected)).join('')
     : '<li class="empty">「習慣」タブから習慣を追加できます</li>';
+  renderDiary();
 }
+
+/* ========== ひとこと日記・気分 ========== */
+const MOODS = [
+  { v: 1, icon: 'frown',   name: 'つらい',   color: '#6366f1' },
+  { v: 2, icon: 'annoyed', name: 'いまいち', color: '#0ea5e9' },
+  { v: 3, icon: 'meh',     name: 'ふつう',   color: '#94a3b8' },
+  { v: 4, icon: 'smile',   name: 'いい',     color: '#22c55e' },
+  { v: 5, icon: 'laugh',   name: 'さいこう', color: '#f59e0b' },
+];
+const moodOf = v => MOODS.find(m => m.v === v) || null;
+const diaryOf = s => (data.diary && data.diary[s]) || null;
+function renderDiary() {
+  const dy = diaryOf(selected);
+  $('#moodRow').innerHTML = MOODS.map(m => `<button type="button" class="mood${dy && dy.mood === m.v ? ' on' : ''}" data-mood="${m.v}" style="--mc:${m.color}" aria-pressed="${dy && dy.mood === m.v ? 'true' : 'false'}">${icon(m.icon)}<span>${m.name}</span></button>`).join('');
+  if (document.activeElement !== $('#diaryText')) $('#diaryText').value = dy ? dy.text : '';
+}
+function setDiary(patch) {
+  data.diary = data.diary || {};
+  const cur = data.diary[selected] || { mood: 0, text: '' };
+  const next = { ...cur, ...patch, t: Date.now() };
+  if (!next.mood && !next.text) next.text = ''; // 空でも「消した」ことを同期で伝えるため残す
+  data.diary[selected] = next;
+  save();
+}
+$('#moodRow').addEventListener('click', e => {
+  const b = e.target.closest('[data-mood]');
+  if (!b) return;
+  const v = Number(b.dataset.mood);
+  const cur = diaryOf(selected);
+  setDiary({ mood: cur && cur.mood === v ? 0 : v }); // 同じ気分をもう一度押すと取り消し
+  renderDiary();
+  if (currentView === 'calendar' && prefs.monthStyle === 'column') renderMonth();
+});
+let diaryTimer = null;
+$('#diaryText').addEventListener('input', () => {
+  clearTimeout(diaryTimer);
+  diaryTimer = setTimeout(() => setDiary({ text: $('#diaryText').value.trim().slice(0, 300) }), 600);
+});
+$('#diaryText').addEventListener('blur', () => {
+  clearTimeout(diaryTimer);
+  const v = $('#diaryText').value.trim().slice(0, 300);
+  const cur = diaryOf(selected);
+  if ((cur ? cur.text : '') !== v) setDiary({ text: v });
+});
 
 // 日パネルの習慣1行
 function habitDayRow(h, s) {
@@ -507,6 +597,7 @@ function renderHabits() {
               ? `<div><b>${Core.weekCount(h, data.marks, today)}/${Core.weekNeed(h)}</b>今週の回数</div>`
               : `<div><b>${r.done}/${r.total}</b>日</div>`}
           </div>
+          ${badgeHtml(h)}
           <div class="week">${cells}</div>
           <button class="stats-toggle" data-stats="${esc(h.id)}">${open ? '振り返りを閉じる ▴' : '振り返り（1年・月ごと） ▾'}</button>
           ${open ? habitStatsHtml(h) : ''}
@@ -613,6 +704,11 @@ function setWeekdayChips(days) {
 }
 const chosenWeekdays = () => [...document.querySelectorAll('#evWeekdays button.on')].map(b => Number(b.dataset.wd));
 function syncDialogUi() {
+  const kind = $('#evKind').value;
+  $('#evKindHint').hidden = !kind;
+  if (kind) { $('#evAllDay').checked = true; $('#evRepeat').value = 'yearly'; }
+  $('#evAllDay').disabled = !!kind;
+  $('#evRepeat').disabled = !!kind;
   const allDay = $('#evAllDay').checked;
   document.querySelectorAll('#eventForm .time-field').forEach(el => { el.hidden = allDay; });
   const r = $('#evRepeat').value;
@@ -662,6 +758,8 @@ function openEvent(id, occStart, newDate) {
   $('#evMemo').value = ev ? (ev.memo || '') : '';
   $('#evRemind').value = ev && ev.remind != null ? String(ev.remind) : '';
   $('#evDelete').hidden = !ev;
+  $('#evKind').value = ev && ev.kind ? ev.kind : '';
+  renderTemplateRow(!ev);
   syncDialogUi();
   dlg.showModal();
   setTimeout(() => { if (!ev) $('#evTitle').focus(); }, 50);
@@ -681,9 +779,12 @@ function readForm() {
     if (repeat.freq === 'weekly') repeat.byWeekday = chosenWeekdays().length ? chosenWeekdays() : [parseYmd(date).getDay()];
     if ($('#evUntil').value) repeat.until = $('#evUntil').value;
   }
+  const kind = $('#evKind').value || '';
+  if (kind) repeat = { freq: 'yearly', interval: 1 }; // 誕生日・記念日は毎年
   return {
     title: $('#evTitle').value.trim(),
-    date, time, endDate, endTime,
+    date, time: kind ? '' : time, endDate: kind ? '' : endDate, endTime: kind ? '' : endTime,
+    kind,
     categoryId: $('#evCategory').value || '',
     repeat,
     memo: $('#evMemo').value.trim(),
@@ -824,6 +925,61 @@ function newTx() {
   };
 }
 $('#evCal').addEventListener('change', syncCalUi);
+$('#evKind').addEventListener('change', syncDialogUi);
+
+/* ========== 予定のテンプレ（よく使う予定をワンタップで） ========== */
+const activeTemplates = () => (data.templates || []).filter(t => !t.deleted);
+// 新しい予定を作るときだけ、上にテンプレを並べる
+function renderTemplateRow(isNew) {
+  const list = activeTemplates();
+  const row = $('#tplRow');
+  row.hidden = !isNew || !list.length;
+  row.innerHTML = `<span class="tpl-label">${icon('bookmark')}テンプレ</span>` + list.map(t =>
+    `<span class="tpl-chip"><button type="button" data-tpl="${esc(t.id)}">${esc(t.title)}${t.time ? ` <small>${esc(t.time)}</small>` : ''}</button>` +
+    `<button type="button" class="tpl-del" data-tpl-del="${esc(t.id)}" aria-label="${esc(t.title)}のテンプレを消す">${icon('x')}</button></span>`).join('');
+  $('#evSaveTpl').hidden = !!$('#evKind').value;
+}
+$('#tplRow').addEventListener('click', e => {
+  const del = e.target.closest('[data-tpl-del]');
+  if (del) {
+    const t = activeTemplates().find(x => x.id === del.dataset.tplDel);
+    if (t && confirm(`テンプレ「${t.title}」を消しますか？`)) {
+      data.templates = data.templates.map(x => x.id === t.id ? { id: t.id, deleted: true, updatedAt: Date.now() } : x);
+      save(); renderTemplateRow(true);
+    }
+    return;
+  }
+  const b = e.target.closest('[data-tpl]');
+  const t = b && activeTemplates().find(x => x.id === b.dataset.tpl);
+  if (!t) return;
+  // 日付はそのまま、ほかの中身をテンプレで埋める
+  $('#evTitle').value = t.title;
+  $('#evAllDay').checked = !t.time;
+  $('#evTime').value = t.time || '';
+  $('#evEndTime').value = t.endTime || '';
+  fillCategorySelect(t.categoryId || '');
+  $('#evRemind').value = t.remind != null ? String(t.remind) : '';
+  $('#evMemo').value = t.memo || '';
+  syncDialogUi();
+  toast(`「${t.title}」を入れました`);
+});
+$('#evSaveTpl').addEventListener('click', () => {
+  const title = $('#evTitle').value.trim();
+  if (!title) { toast('先にタイトルを入れてください'); return; }
+  const allDay = $('#evAllDay').checked;
+  const tpl = {
+    title, time: allDay ? '' : $('#evTime').value, endTime: allDay ? '' : $('#evEndTime').value,
+    categoryId: $('#evCategory').value || '', memo: $('#evMemo').value.trim(),
+    remind: $('#evRemind').value === '' ? null : Number($('#evRemind').value),
+  };
+  data.templates = data.templates || [];
+  const same = activeTemplates().find(x => x.title === title);
+  if (same) Object.assign(same, tpl, { updatedAt: Date.now() });
+  else data.templates.push({ id: uid(), ...tpl, updatedAt: Date.now() });
+  save();
+  renderTemplateRow(!editing);
+  toast(same ? `テンプレ「${title}」を上書きしました` : `テンプレ「${title}」を保存しました。次からワンタップで入れられます`);
+});
 $('#evCancel').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 dlg.addEventListener('close', () => { editing = null; });

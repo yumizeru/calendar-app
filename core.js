@@ -221,6 +221,39 @@ const Core = (() => {
     return isDue(h, s) ? 0 : -1;
   }
 
+  // これまでで一番長く続いた記録（バッジ用）。週N回の習慣は週の数
+  function bestStreak(h, marks, today) {
+    let first = null;
+    const suffix = `|${h.id}`;
+    for (const k in marks || {}) if (k.endsWith(suffix) && (!first || k.slice(0, 10) < first)) first = k.slice(0, 10);
+    if (!first) return { n: 0, unit: freqOf(h).type === 'weekly' ? '週' : '日' };
+    let best = 0, run = 0;
+    if (freqOf(h).type === 'weekly') {
+      const need = weekNeed(h);
+      for (let ws = weekStart(first); ws <= today; ws = addDaysStr(ws, 7)) {
+        if (weekCount(h, marks, ws) >= need) { run++; best = Math.max(best, run); }
+        else if (addDaysStr(ws, 6) < today) run = 0; // 今週はまだ途中なので途切れにしない
+      }
+      return { n: best, unit: '週' };
+    }
+    for (let s = first; s <= today; s = addDaysStr(s, 1)) {
+      if (!isDue(h, s)) continue;
+      if (doneOn(h, marks, s)) { run++; best = Math.max(best, run); }
+      else if (s < today) run = 0;
+    }
+    return { n: best, unit: '日' };
+  }
+  const BADGE_STEPS = [3, 7, 14, 30, 50, 100, 200, 365];
+
+  // 誕生日・記念日の「〇歳」「〇周年」
+  function kindSuffix(ev, occStart) {
+    if (!ev || !ev.kind) return '';
+    const n = Number(occStart.slice(0, 4)) - Number(ev.date.slice(0, 4));
+    if (ev.kind === 'birthday') return n >= 0 ? `（${n}歳）` : '';
+    if (ev.kind === 'anniv') return n >= 1 ? `（${n}周年）` : '';
+    return '';
+  }
+
   function freqLabel(h) {
     const f = freqOf(h);
     if (f.type === 'weekdays') return (f.days || []).slice().sort().map(i => WD[i]).join('・') || '曜日未設定';
@@ -232,6 +265,7 @@ const Core = (() => {
   return {
     pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD, matches, expand, onDay, timeLabel, repeatLabel, duration,
     freqOf, isNumeric, weekStart, isDue, markOf, isDoneMark, doneOn, valueOn, weekCount, weekNeed, streak, rate, level, freqLabel, fmtNum,
+    bestStreak, BADGE_STEPS, kindSuffix,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Core;

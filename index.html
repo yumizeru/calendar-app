@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="20">
+  <meta name="app-version" content="21">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -30,10 +30,14 @@
   <main>
     <!-- カレンダー -->
     <section class="view" id="view-calendar">
-      <div class="seg" role="tablist" aria-label="表示の切り替え">
-        <button class="seg-btn active" data-mode="month">月</button>
-        <button class="seg-btn" data-mode="week">週</button>
-        <button class="seg-btn" data-mode="list">リスト</button>
+      <div class="cal-top">
+        <div class="seg" role="tablist" aria-label="表示の切り替え">
+          <button class="seg-btn active" data-mode="month">月</button>
+          <button class="seg-btn" data-mode="week">週</button>
+          <button class="seg-btn" data-mode="list">リスト</button>
+        </div>
+        <button class="icon-btn" id="openSearch" aria-label="予定をさがす"><i data-icon="search"></i></button>
+        <button class="icon-btn" id="openReport" aria-label="月のまとめ"><i data-icon="chart-column"></i></button>
       </div>
 
       <div id="monthView">
@@ -58,6 +62,11 @@
         </div>
         <h3 class="sub">習慣</h3>
         <ul class="habit-checks" id="habitChecks"></ul>
+        <h3 class="sub">ひとこと日記</h3>
+        <div class="diary">
+          <div class="mood-row" id="moodRow" role="group" aria-label="きょうの気分"></div>
+          <textarea id="diaryText" rows="2" maxlength="300" placeholder="きょうのひとこと（なくてもOK）"></textarea>
+        </div>
       </div>
     </section>
 
@@ -277,7 +286,16 @@
   <dialog id="eventDialog">
     <form method="dialog" id="eventForm">
       <h3 id="eventDialogTitle">予定</h3>
+      <div class="tpl-row" id="tplRow" hidden></div>
       <label>タイトル<input id="evTitle" type="text" maxlength="60" required></label>
+      <label>種類
+        <select id="evKind">
+          <option value="">ふつうの予定</option>
+          <option value="birthday">誕生日（毎年・〇歳を表示）</option>
+          <option value="anniv">記念日（毎年・〇周年を表示）</option>
+        </select>
+        <small class="hint" id="evKindHint" hidden>はじめの日付に、生まれた日（始まった日）を入れてください。毎年くり返し表示されます。</small>
+      </label>
       <label id="evCalRow" hidden>カレンダー<select id="evCal"></select></label>
       <label class="check-row"><input id="evAllDay" type="checkbox"> 終日</label>
       <div class="row">
@@ -321,6 +339,7 @@
       </label>
       <label>メモ<textarea id="evMemo" rows="3" maxlength="500"></textarea></label>
       <p class="muted small" id="evSharedInfo" hidden></p>
+      <button class="btn small" type="button" id="evSaveTpl"><i data-icon="bookmark-plus"></i>この内容をテンプレに保存</button>
       <div class="row end">
         <button class="btn danger" id="evDelete" type="button">削除</button>
         <span class="spacer"></span>
@@ -394,6 +413,25 @@
     </form>
   </dialog>
 
+  <dialog id="searchDialog" class="help-dialog">
+    <div class="help-head">
+      <h3><i data-icon="search"></i>さがす</h3>
+      <button class="icon-btn" id="searchClose" aria-label="とじる"><i data-icon="x"></i></button>
+    </div>
+    <div class="search-box"><input id="searchInput" type="search" placeholder="予定・ToDo・日記の言葉で検索" autocomplete="off" enterkeyhint="search"></div>
+    <div class="help-body" id="searchResults"></div>
+  </dialog>
+
+  <dialog id="reportDialog" class="help-dialog">
+    <div class="help-head">
+      <button class="icon-btn" id="reportPrev" aria-label="前の月"><i data-icon="chevron-left"></i></button>
+      <h3 id="reportTitle"></h3>
+      <button class="icon-btn" id="reportNext" aria-label="次の月"><i data-icon="chevron-right"></i></button>
+      <button class="icon-btn" id="reportClose" aria-label="とじる"><i data-icon="x"></i></button>
+    </div>
+    <div class="help-body" id="reportBody"></div>
+  </dialog>
+
   <dialog id="helpDialog" class="help-dialog">
     <div class="help-head">
       <h3 id="helpTitle"></h3>
@@ -430,6 +468,7 @@
   <script src="app.js"></script>
   <script src="sync.js"></script>
   <script src="shared.js"></script>
+  <script src="extras.js"></script>
   <script src="push.js"></script>
   <script src="widget.js"></script>
   <script src="tour.js"></script>

@@ -44,6 +44,12 @@ const Tour = (() => {
       before: goMonth,
     },
     {
+      target: '#openSearch',
+      title: 'さがす・月のまとめ',
+      text: '虫めがねで、予定・ToDo・日記をさがせます。\nとなりのグラフのボタンで、その月の予定や習慣、気分をまとめて振り返れます。',
+      before: goMonth,
+    },
+    {
       target: '#addEvent',
       title: '予定を追加',
       text: '「＋ 予定」から予定を追加します。\n時刻・繰り返し・色分け・通知（リマインダー）も、ここで設定できます。',
