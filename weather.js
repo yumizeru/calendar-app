@@ -90,10 +90,19 @@ const Weather = (() => {
   }
 
   /* ---------- 設定 ---------- */
+  // ウィジェットでも天気を出せるように、場所を同期データ（data.wxPlace）に入れる
+  function syncPlace() {
+    if (typeof App === 'undefined' || !App.update) return;
+    const want = pref.on && pref.lat != null ? { lat: pref.lat, lon: pref.lon, name: pref.name || '' } : { off: true };
+    const { t, ...cur } = App.data.wxPlace || {};
+    if (JSON.stringify(cur) === JSON.stringify(want)) return;
+    App.update(d => { d.wxPlace = { ...want, t: Date.now() }; });
+  }
   function setPref(p) {
     pref = { ...pref, ...p };
     store(PREF_KEY, pref);
     document.dispatchEvent(new CustomEvent('hibilog:weather'));
+    syncPlace();
     renderSettings();
     if (typeof App !== 'undefined') App.render();
     refresh(true);
@@ -154,6 +163,8 @@ const Weather = (() => {
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+  // 前から天気をオンにしている人の分も入れておく（app.js の読み込み後）
+  window.addEventListener('load', () => { if (pref.on) syncPlace(); });
   setTimeout(() => refresh(), 500);
   return {
     get, mini, short, line, summary, refresh, kind, get on() { return !!pref.on; },

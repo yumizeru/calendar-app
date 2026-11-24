@@ -157,11 +157,11 @@ const Theme = (() => {
     if (b.tone === 'auto') {
       return {
         auto: true,
-        light: { bg: '#ffffff', text: '#1c1f27', muted: '#6b7280', accent: readableOn(accentHex, '#ffffff') },
-        dark: { bg: '#1d2028', text: '#e8eaf0', muted: '#9aa1ae', accent: readableOn(accentHex, '#1d2028') },
+        light: { bg: '#ffffff', card: '#f2f4f8', text: '#1c1f27', muted: '#6b7280', accent: readableOn(accentHex, '#ffffff') },
+        dark: { bg: '#1d2028', card: '#262a34', text: '#e8eaf0', muted: '#9aa1ae', accent: readableOn(accentHex, '#1d2028') },
       };
     }
-    return { auto: false, bg: b.surface, text: b.text, muted: b.muted, accent: readableOn(accentHex, b.surface), tone: b.tone };
+    return { auto: false, bg: b.surface, card: b.surface2, text: b.text, muted: b.muted, accent: readableOn(accentHex, b.surface), tone: b.tone };
   }
 
   function label() {

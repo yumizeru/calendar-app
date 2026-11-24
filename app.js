@@ -51,6 +51,8 @@ function normalize(d) {
     .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
   // 毎朝のまとめ通知：{ on, time: 'HH:MM', tz, wx: { lat, lon, name } | null, t }
   if (d.morning && typeof d.morning === 'object') out.morning = { ...d.morning, t: num(d.morning.t) };
+  // 天気の場所（ウィジェットが天気を出すため）：{ lat, lon, name, t } か { off: true, t }
+  if (d.wxPlace && typeof d.wxPlace === 'object') out.wxPlace = { ...d.wxPlace, t: num(d.wxPlace.t) };
   // ひとこと日記：{ "YYYY-MM-DD": { mood: 1〜5 か 0, text, t } }
   if (d.diary && typeof d.diary === 'object') {
     for (const [k, v] of Object.entries(d.diary)) {
@@ -111,6 +113,7 @@ function mergeData(a, b) {
     appearance: !a.appearance ? b.appearance : !b.appearance ? a.appearance : (b.appearance.t > a.appearance.t ? b.appearance : a.appearance),
     feeds: byId(a.feeds, b.feeds),
     morning: !a.morning ? b.morning : !b.morning ? a.morning : (b.morning.t > a.morning.t ? b.morning : a.morning),
+    wxPlace: !a.wxPlace ? b.wxPlace : !b.wxPlace ? a.wxPlace : (b.wxPlace.t > a.wxPlace.t ? b.wxPlace : a.wxPlace),
   };
 }
 
