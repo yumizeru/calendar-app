@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="22">
+  <meta name="app-version" content="23">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -188,7 +188,8 @@
               <button class="btn" type="submit" data-mode="signup">新規登録</button>
               <button class="btn primary" type="submit" data-mode="login">ログイン</button>
             </div>
-            <p class="muted small">はじめての人は「新規登録」、2台目以降の端末では同じメールアドレスとパスワードで「ログイン」してください。パスワードは忘れないようにメモしておいてください。</p>
+            <p class="muted small">はじめての人は「新規登録」、2台目以降の端末では同じメールアドレスとパスワードで「ログイン」してください。</p>
+            <button class="btn small" type="button" id="forgotPw">パスワードを忘れたとき</button>
           </form>
         </div>
         <div id="cloudIn" hidden>
@@ -198,6 +199,7 @@
             <button class="btn" id="syncNow">今すぐ同期</button>
             <button class="btn" id="logoutBtn">ログアウト</button>
           </div>
+          <button class="btn small" type="button" id="changePw">パスワードを変更</button>
         </div>
         </div>
       </details>
@@ -478,6 +480,20 @@
       <span class="spacer"></span>
       <button class="btn primary" id="helpTour" hidden><i data-icon="map-pin"></i> 画面で案内する</button>
     </div>
+  </dialog>
+
+  <dialog id="pwDialog">
+    <form method="dialog" id="pwForm" class="stack">
+      <h3>新しいパスワードを決める</h3>
+      <p class="muted small" id="pwFor"></p>
+      <label>新しいパスワード（8文字以上）<input id="pwNew" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>もう一度（確認）<input id="pwNew2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="muted small" id="pwNote"></p>
+      <div class="row end">
+        <button class="btn" type="button" id="pwCancel">キャンセル</button>
+        <button class="btn primary" type="submit">保存</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="scopeDialog">

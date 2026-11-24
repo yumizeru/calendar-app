@@ -96,6 +96,85 @@ const Cloud = (() => {
     return 'エラー：' + m;
   }
 
+  /* ---------- パスワードの再設定 ----------
+   * 1. 「パスワードを忘れたとき」→ 登録メールに再設定用のリンクを送る
+   * 2. リンクを開くと、URLの # のあとにログイン用の情報（type=recovery）が付いてくる
+   * 3. それでログインした状態にして、新しいパスワードを決める画面を出す
+   * （iPhoneではリンクがSafariで開くので、決めたあとホーム画面のアプリでログインし直す） */
+  const APP_URL = new URL('./', location.href).href;
+  let recovering = false;
+
+  async function sendReset() {
+    let email = $('#loginEmail').value.trim();
+    if (!email) email = (prompt('登録したメールアドレスを入れてください') || '').trim();
+    if (!email) return;
+    if (!confirm(`${email} に、パスワードを決め直すためのメールを送ります。よろしいですか？`)) return;
+    const btn = $('#forgotPw');
+    btn.disabled = true;
+    try {
+      const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: APP_URL });
+      if (error) throw error;
+      alert(`${email} にメールを送りました。
+
+メールの中のリンクを開くと、新しいパスワードを決める画面が出ます。
+
+届かないときは迷惑メールのフォルダも見てください。リンクは1時間だけ使えます。`);
+    } catch (err) {
+      App.toast(friendlyError(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // URL に再設定リンクの情報が付いていれば読み取る（あとで URL からは消す）
+  async function readRecoveryLink() {
+    const h = location.hash.replace(/^#/, '');
+    if (!/access_token=|error_code=/.test(h)) return;
+    const q = new URLSearchParams(h);
+    history.replaceState(null, '', location.pathname + location.search);
+    if (q.get('error_code')) {
+      alert(/expired/.test(q.get('error_code') + q.get('error_description'))
+        ? 'このリンクは有効期限が切れているか、すでに使われています。\nもう一度「パスワードを忘れたとき」からメールを送ってください。'
+        : 'リンクを開けませんでした。もう一度「パスワードを忘れたとき」からメールを送ってください。');
+      return;
+    }
+    if (q.get('type') !== 'recovery') return;
+    const { data, error } = await client.auth.setSession({
+      access_token: q.get('access_token'), refresh_token: q.get('refresh_token'),
+    });
+    if (error) { alert('リンクを開けませんでした。もう一度メールを送ってください。'); return; }
+    session = data.session;
+    recovering = true;
+  }
+
+  function openPwDialog(fromLink) {
+    $('#pwFor').textContent = session ? `${session.user.email || ''} のパスワード` : '';
+    $('#pwNote').textContent = fromLink
+      ? 'ホーム画面のアプリを使っている人は、保存したあとアプリを開いて、このパスワードで「ログイン」してください。'
+      : 'ほかの端末はそのまま使えます。次にログインするときから新しいパスワードを使ってください。';
+    $('#pwNew').value = ''; $('#pwNew2').value = '';
+    $('#pwDialog').showModal();
+  }
+
+  async function savePassword(e) {
+    e.preventDefault();
+    const a = $('#pwNew').value, b = $('#pwNew2').value;
+    if (a !== b) { App.toast('2つのパスワードが同じではありません'); return; }
+    const btn = e.submitter;
+    if (btn) btn.disabled = true;
+    try {
+      const { error } = await client.auth.updateUser({ password: a });
+      if (error) throw error;
+      $('#pwDialog').close();
+      App.toast('新しいパスワードにしました');
+    } catch (err) {
+      const m = String(err && err.message || '');
+      App.toast(/different from the old/i.test(m) ? '前と同じパスワードです。ちがうものにしてください。' : friendlyError(err));
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   /* ---------- リマインダー ---------- */
   function buildReminders(d) {
     const now = Date.now();
@@ -195,9 +274,13 @@ const Cloud = (() => {
     renderAccount();
     if (!client) return;
 
-    const { data } = await client.auth.getSession();
-    session = data.session;
+    await readRecoveryLink().catch(err => console.warn('recovery link', err));
+    if (!recovering) {
+      const { data } = await client.auth.getSession();
+      session = data.session;
+    }
     renderAccount();
+    if (recovering) openPwDialog(true);
     client.auth.onAuthStateChange((_event, s) => {
       const was = !!session;
       session = s;
@@ -233,6 +316,10 @@ const Cloud = (() => {
       }
     });
     $('#syncNow').addEventListener('click', () => sync());
+    $('#forgotPw').addEventListener('click', sendReset);
+    $('#changePw').addEventListener('click', () => openPwDialog(false));
+    $('#pwForm').addEventListener('submit', savePassword);
+    $('#pwCancel').addEventListener('click', () => $('#pwDialog').close());
     $('#logoutBtn').addEventListener('click', async () => {
       if (!confirm('ログアウトしますか？（この端末のデータは残ります）')) return;
       await signOut();
