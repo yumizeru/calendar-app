@@ -497,6 +497,11 @@ body[data-month-style="titles"] .cell .dots { justify-content: center; }
 .tcount .ico, .tchip .ico, .mtag .ico { width: .9em; height: .9em; margin-right: 1px; }
 #evSharedInfo .ico { margin-right: 4px; }
 
+/* 設定の項目を開いているときの「閉じる」ボタン（左上、前の月ボタンの位置に重ねる） */
+.topbar { position: sticky; }
+.close-section { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: var(--accent); color: var(--accent-text); z-index: 1; }
+.close-section .ico { stroke-width: 2.6; }
+
 /* テーマの選択 */
 .tp-group + .tp-group { margin-top: 4px; }
 .tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.4rem, 1fr)); gap: 8px; }

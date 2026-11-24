@@ -308,6 +308,34 @@ function applyPrefs() {
   $('#prefFontTip').hidden = !(Number(prefs.font) > 1 && prefs.monthStyle !== 'column');
   if (typeof Updater !== 'undefined') updateSettingsSummary();
 }
+/* ========== 設定：開いている項目の「閉じる」ボタン ========== */
+const openSettingsSections = () => [...document.querySelectorAll('#view-settings details.acc[open]')];
+// 項目を開いているときは、左上に×、タイトルにその項目の名前を出す
+function syncSettingsHeader() {
+  if (currentView !== 'settings') { $('#closeSection').hidden = true; return; }
+  const open = openSettingsSections();
+  $('#closeSection').hidden = !open.length;
+  $('#monthTitle').textContent = open.length === 1 ? open[0].querySelector('.acc-text b').textContent : '設定';
+}
+function closeSettingsSections() {
+  const open = openSettingsSections();
+  if (!open.length) return;
+  const first = open[0];
+  open.forEach(d => { d.open = false; });
+  syncSettingsHeader();
+  // 閉じた項目が見える位置まで戻る
+  const top = first.getBoundingClientRect().top + window.scrollY - $('.topbar').offsetHeight - 8;
+  window.scrollTo({ top: Math.max(0, top) });
+}
+$('#closeSection').addEventListener('click', closeSettingsSections);
+// 項目を開け閉めしたら、ボタンとタイトルを合わせる（ほかの項目を開いたら前の項目は閉じる）
+document.querySelectorAll('#view-settings details.acc').forEach(d => d.addEventListener('toggle', () => {
+  if (d.open && !(typeof Tour !== 'undefined' && Tour.active)) {
+    openSettingsSections().forEach(x => { if (x !== d) x.open = false; });
+  }
+  syncSettingsHeader();
+}));
+
 // 設定の各項目を閉じたときに右に出す「今の状態」
 function updateSettingsSummary() {
   const fontName = { '1': '標準', '1.18': '大きい', '1.36': 'とても大きい' }[String(prefs.font)] || '標準';
@@ -538,7 +566,8 @@ function render() {
   if (currentView === 'calendar') renderCalendar();
   else if (currentView === 'habits') renderHabits();
   else if (currentView === 'todos') renderTodos();
-  else { $('#monthTitle').textContent = '設定'; renderCategories(); updateSettingsSummary(); }
+  else { renderCategories(); updateSettingsSummary(); }
+  syncSettingsHeader();
   updateTodoBadge();
   const showNav = currentView === 'habits' || (currentView === 'calendar' && calMode !== 'list');
   $('#prevMonth').style.visibility = showNav ? '' : 'hidden';

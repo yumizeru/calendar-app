@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="19">
+  <meta name="app-version" content="20">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -20,6 +20,8 @@
 </head>
 <body>
   <header class="topbar">
+    <!-- 設定の項目を開いているときだけ出る「閉じる」ボタン（どこまで下に進んでもすぐ戻れる） -->
+    <button class="icon-btn close-section" id="closeSection" aria-label="開いている項目を閉じる" hidden><i data-icon="x"></i></button>
     <button class="icon-btn" id="prevMonth" aria-label="前の月"><i data-icon="chevron-left"></i></button>
     <button class="month-title" id="monthTitle" aria-label="今日に戻る"></button>
     <button class="icon-btn" id="nextMonth" aria-label="次の月"><i data-icon="chevron-right"></i></button>
