@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="23">
+  <meta name="app-version" content="24">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -230,6 +230,46 @@
         </details>
         </div>
       </details>
+      <details class="acc" id="feedCard">
+        <summary><span class="acc-ico"><i data-icon="calendar-days"></i></span><span class="acc-text"><b>iPhone・Googleのカレンダーを表示</b><small id="sumFeed"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
+        <div class="acc-body">
+          <p class="muted">iPhoneのカレンダーやGoogleカレンダーの予定を、ひびログにも表示します。<b>見るだけ</b>なので、変更や削除は元のアプリでしてください。30分ごとに新しくなります。</p>
+          <p class="muted" id="feedLoginNote">使うには「アカウントと同期」でログインしてください。</p>
+          <ul class="feed-list" id="feedList"></ul>
+          <form id="feedAdd" class="stack">
+            <input id="feedName" type="text" maxlength="20" placeholder="名前（例：iPhoneの家族）" required>
+            <input id="feedUrl" type="text" inputmode="url" autocomplete="off" placeholder="カレンダーのURLを貼り付け" required>
+            <div class="row">
+              <label class="feed-color">色<input type="color" id="feedColor" value="#8e6cf0"></label>
+              <span class="spacer"></span>
+              <button class="btn" type="button" id="feedRefresh">今すぐ更新</button>
+              <button class="btn primary" type="submit">追加</button>
+            </div>
+          </form>
+          <details class="howto">
+            <summary>URLの調べ方（iPhoneのカレンダー）</summary>
+            <ol class="help-steps">
+              <li>iPhoneの「カレンダー」アプリを開き、画面の下の「カレンダー」を押す</li>
+              <li>表示したいカレンダーの右にある「i」を押す（「iCloud」の下にあるカレンダーだけ使えます）</li>
+              <li>下のほうの「公開カレンダー」をオンにする</li>
+              <li>出てきた「リンクを共有…」→「コピー」を押す</li>
+              <li>ひびログに戻って、上の「URLを貼り付け」に貼り付けて「追加」</li>
+            </ol>
+            <p class="muted small">「公開カレンダー」は、URLを知っている人なら見られる状態になります。URLは人に教えないでください。やめたいときは、同じ場所で「公開カレンダー」をオフにします。</p>
+          </details>
+          <details class="howto">
+            <summary>URLの調べ方（Googleカレンダー）</summary>
+            <ol class="help-steps">
+              <li>パソコン（またはSafariのパソコン用表示）で Googleカレンダーを開く</li>
+              <li>右上の歯車 →「設定」を押す</li>
+              <li>左の「マイカレンダーの設定」から、表示したいカレンダーを選ぶ</li>
+              <li>下のほうの「カレンダーの統合」にある「iCal 形式の非公開URL」をコピー</li>
+              <li>ひびログに貼り付けて「追加」（パソコンで追加すれば、iPhoneにも同期されます）</li>
+            </ol>
+            <p class="muted small">このURLは人に教えないでください。</p>
+          </details>
+        </div>
+      </details>
       <details class="acc" id="pushCard" hidden>
         <summary><span class="acc-ico"><i data-icon="bell"></i></span><span class="acc-text"><b>通知（リマインダー）</b><small id="sumPush"></small></span><span class="acc-chev"><i data-icon="chevron-right"></i></span></summary>
         <div class="acc-body">
@@ -239,6 +279,17 @@
           <button class="btn" id="pushTest" hidden>テスト通知を送る</button>
           <button class="btn" id="pushDisable" hidden>オフにする</button>
         </div>
+        <h4 class="acc-sub">毎朝のまとめ</h4>
+        <label class="set-row toggle-row">
+          <span>毎朝、今日のまとめを通知<small class="muted small">今日の予定・天気・やること・習慣を1つの通知でお知らせ</small></span>
+          <input type="checkbox" class="switch" id="mnOn">
+        </label>
+        <label class="set-row toggle-row" id="mnTimeRow" hidden>
+          <span>届く時刻</span>
+          <select id="mnTime"></select>
+        </label>
+        <p class="muted small" id="mnNote"></p>
+        <button class="btn small" type="button" id="mnTest" hidden>試しに今送る</button>
         </div>
       </details>
       </div>
@@ -319,6 +370,11 @@
   <dialog id="eventDialog">
     <form method="dialog" id="eventForm">
       <h3 id="eventDialogTitle">予定</h3>
+      <div class="nl-row" id="quickRow">
+        <label for="evQuick"><i data-icon="sparkles"></i>ひと言で入力</label>
+        <input id="evQuick" type="text" maxlength="100" placeholder="例：明日15時 歯医者" enterkeyhint="done" autocomplete="off">
+        <p class="nl-found" id="evQuickFound">日付・時刻・くり返しを読み取って、下に自動で入れます</p>
+      </div>
       <div class="tpl-row" id="tplRow" hidden></div>
       <label>タイトル<input id="evTitle" type="text" maxlength="60" required></label>
       <label>種類
@@ -482,6 +538,15 @@
     </div>
   </dialog>
 
+  <dialog id="feedEvDialog">
+    <h3 id="feedEvTitle"></h3>
+    <p class="feed-ev-when" id="feedEvWhen"></p>
+    <p class="muted" id="feedEvPlace"></p>
+    <p class="feed-ev-from" id="feedEvFrom"></p>
+    <p class="muted small">ほかのカレンダーの予定なので、ここでは変更できません。変更は元のアプリ（iPhoneのカレンダーやGoogleカレンダー）でしてください。</p>
+    <div class="row end"><button class="btn primary" type="button" id="feedEvClose">閉じる</button></div>
+  </dialog>
+
   <dialog id="pwDialog">
     <form method="dialog" id="pwForm" class="stack">
       <h3>新しいパスワードを決める</h3>
@@ -513,9 +578,11 @@
   <script src="holidays.js"></script>
   <script src="core.js"></script>
   <script src="weather.js"></script>
+  <script src="quickadd.js"></script>
   <script src="app.js"></script>
   <script src="sync.js"></script>
   <script src="shared.js"></script>
+  <script src="feeds.js"></script>
   <script src="extras.js"></script>
   <script src="push.js"></script>
   <script src="widget.js"></script>

@@ -707,3 +707,25 @@ html[data-tone="dark"] .wx-short .lo, html[data-tone="dark"] .wx-line .lo { colo
 .backup-list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
 .backup-list li span { flex: 1; }
 .backup-list small { color: var(--muted); }
+
+/* ---------- ひと言で入力 ---------- */
+.nl-row { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.nl-row > label { display: flex; flex-direction: row; font-size: .95rem; color: var(--text); align-items: center; gap: 6px; font-weight: 700; margin-bottom: 6px; }
+.nl-row > label svg { width: 1.1em; height: 1.1em; color: var(--accent); }
+.nl-row input { width: 100%; }
+.nl-found { margin: 6px 0 0; font-size: .85em; color: var(--muted, #888); }
+.nl-found.on { color: var(--text); font-weight: 600; }
+
+/* ---------- ほかのカレンダー ---------- */
+.feed-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.feed-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.feed-list .name { flex: 1; display: flex; flex-direction: column; font-weight: 600; }
+.feed-list .name small { font-weight: 400; }
+.feed-list .error { color: #d14b4b; }
+.feed-color { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
+.feed-color input { width: 44px; height: 36px; padding: 2px; }
+.howto { margin-top: 10px; border-radius: 10px; background: var(--surface-2); padding: 8px 12px; }
+.howto summary { cursor: pointer; font-weight: 600; }
+.feed-ev-when { font-size: 1.05rem; font-weight: 600; }
+.feed-ev-from { display: flex; align-items: center; gap: 8px; }
+.feed-ev-from .dot { width: 12px; height: 12px; flex: none; }

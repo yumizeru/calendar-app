@@ -6,6 +6,8 @@
 // （SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY は Supabase が自動で用意する）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
+// アプリと同じ予定の計算（core.js のコピー。tools/build_fn_core.py で作る）
+import Core from './core.js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -75,8 +77,9 @@ async function runDue() {
     .select('id,user_id,event_id,title,body');
   if (error) throw error;
   const queued = await runQueue();
+  const morning = await runMorning(now).catch((e) => { console.error('morning', e); return -1; });
   await pruneBackups(now);
-  if (!due?.length) return { due: 0, sent: 0, queued };
+  if (!due?.length) return { due: 0, sent: 0, queued, morning };
 
   const userIds = [...new Set(due.map((r) => r.user_id))];
   const subs = await subsFor(userIds);
@@ -103,7 +106,7 @@ async function runDue() {
     sent += res.ok;
     errors.push(...res.errors);
   }
-  return { due: due.length, sent, skipped, queued, errors: errors.slice(0, 5) };
+  return { due: due.length, sent, skipped, queued, morning, errors: errors.slice(0, 5) };
 }
 
 // 共有カレンダーの変更通知（データベースが notify_queue に積んだもの）を送る
@@ -129,6 +132,7 @@ async function runQueue() {
 async function pruneBackups(now: number) {
   if (new Date(now).getUTCMinutes() !== 7) return;
   await db.from('notify_queue').delete().not('sent_at', 'is', null).lt('sent_at', new Date(now - 7 * 86400_000).toISOString());
+  await db.from('morning_sent').delete().lt('day', new Date(now - 7 * 86400_000).toISOString().slice(0, 10));
   const { data } = await db.from('user_backups').select('id,user_id').eq('kind', 'auto').order('created_at', { ascending: false });
   const seen = new Map<string, number>();
   const old: number[] = [];
@@ -146,6 +150,151 @@ async function pruneBackups(now: number) {
     if (n > 5) old.push(b.id);
   }
   if (old.length) await db.from('user_backups').delete().in('id', old);
+}
+
+/* ---------- 毎朝のまとめ ----------
+ * user_data.data.morning = { on, time: 'HH:MM', tz, wx: { lat, lon, name } | null }
+ * その人の時間帯で time〜time+30分のあいだに1回だけ送る（morning_sent で二重送信を防ぐ）
+ */
+type Morning = { on?: boolean; time?: string; tz?: string; wx?: { lat: number; lon: number; name?: string } | null };
+type Feed = { id: string; url: string; name?: string; deleted?: boolean };
+type Todo = { id: string; title?: string; due?: string; done?: boolean; deleted?: boolean };
+type FullData = UserData & {
+  events?: Record<string, unknown>[]; todos?: Todo[]; feeds?: Feed[]; morning?: Morning;
+};
+
+function localNow(ms: number, tz: string) {
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+  const p: Record<string, string> = {};
+  for (const x of f.formatToParts(new Date(ms))) p[x.type] = x.value;
+  return { date: `${p.year}-${p.month}-${p.day}`, min: (Number(p.hour) % 24) * 60 + Number(p.minute) };
+}
+function safeTz(tz?: string) {
+  try { if (tz) { new Intl.DateTimeFormat('en', { timeZone: tz }); return tz; } } catch { /* 下へ */ }
+  return 'Asia/Tokyo';
+}
+
+const ICS_HOSTS = [/(^|\.)icloud\.com$/i, /^calendar\.google\.com$/i, /^outlook\.(live|office365|office)\.com$/i, /^(www\.)?google\.com$/i];
+async function fetchFeed(raw: string) {
+  const u = new URL(String(raw).trim().replace(/^webcals?:\/\//i, 'https://'));
+  if (u.protocol === 'http:') u.protocol = 'https:';
+  if (u.protocol !== 'https:' || !ICS_HOSTS.some((re) => re.test(u.hostname))) return '';
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    let url = u.toString();
+    for (let hop = 0; hop < 4; hop++) {
+      const res = await fetch(url, { signal: ctrl.signal, redirect: 'manual' });
+      const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (loc) {
+        const next = new URL(loc, url);
+        if (next.protocol !== 'https:' || !ICS_HOSTS.some((re) => re.test(next.hostname))) return '';
+        url = next.toString();
+        continue;
+      }
+      return res.ok ? await res.text() : '';
+    }
+    return '';
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const WX = (code: number) =>
+  code === 0 ? '晴れ' : code <= 2 ? '晴れ時々くもり' : code === 3 ? 'くもり' : code === 45 || code === 48 ? '霧'
+  : code >= 51 && code <= 57 ? '小雨' : (code >= 61 && code <= 67) || (code >= 80 && code <= 82) ? '雨'
+  : (code >= 71 && code <= 77) || code === 85 || code === 86 ? '雪' : code >= 95 ? '雷雨' : 'くもり';
+
+async function weatherLine(m: Morning, tz: string) {
+  if (!m.wx || m.wx.lat == null) return '';
+  try {
+    const q = new URLSearchParams({
+      latitude: String(m.wx.lat), longitude: String(m.wx.lon), timezone: tz, forecast_days: '1',
+      daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    });
+    const res = await fetch('https://api.open-meteo.com/v1/forecast?' + q, { signal: AbortSignal.timeout(5000) });
+    const j = await res.json();
+    const d = j.daily;
+    if (!d) return '';
+    const pop = d.precipitation_probability_max?.[0];
+    return `${WX(Number(d.weather_code[0]))} ${Math.round(d.temperature_2m_max[0])}°/${Math.round(d.temperature_2m_min[0])}°` +
+      (pop != null ? ` 降水${pop}%` : '');
+  } catch {
+    return '';
+  }
+}
+
+async function buildMorning(userId: string, d: FullData, today: string, tz: string) {
+  const m = d.morning ?? {};
+  // 自分の予定
+  let events: Record<string, unknown>[] = (d.events ?? []).filter((e) => !e.deleted);
+  // 共有カレンダーの予定
+  const { data: mem } = await db.from('shared_members').select('calendar_id').eq('user_id', userId);
+  const calIds = (mem ?? []).map((x) => x.calendar_id);
+  if (calIds.length) {
+    const { data: sh } = await db.from('shared_events').select('id,data').in('calendar_id', calIds);
+    events = events.concat((sh ?? []).map((r) => ({ ...(r.data as Record<string, unknown>), id: r.id })));
+  }
+  // ほかのカレンダー（iPhone・Google）
+  const feeds = (d.feeds ?? []).filter((f) => !f.deleted && f.url).slice(0, 5);
+  const texts = await Promise.all(feeds.map((f) => fetchFeed(f.url)));
+  texts.forEach((t, i) => {
+    if (t) events = events.concat(Core.parseIcs(t, { from: today, to: today, tz, feedId: feeds[i].id }));
+  });
+  const occ = Core.onDay(events, today);
+  const names = occ.map((o: { ev: { title: string; time?: string } }) => {
+    const tl = Core.timeLabel(o);
+    return `${tl === '終日' ? '' : tl + ' '}${o.ev.title}${Core.kindSuffix(o.ev, (o as unknown as { start: string }).start) || ''}`;
+  });
+  const evLine = names.length
+    ? `予定：${names.slice(0, 3).join('、')}${names.length > 3 ? `（ほか${names.length - 3}件）` : ''}`
+    : '予定：なし';
+
+  const open = (d.todos ?? []).filter((t) => !t.deleted && !t.done);
+  const dueToday = open.filter((t) => t.due === today).length;
+  const overdue = open.filter((t) => t.due && t.due < today).length;
+  const habits = (d.habits ?? []).filter((h) => !h.deleted && Core.isDue(h, today)).length;
+  const extra: string[] = [];
+  if (dueToday || overdue) extra.push(`やること：今日まで${dueToday + overdue}件${overdue ? `（期限切れ${overdue}）` : ''}`);
+  if (habits) extra.push(`習慣：${habits}つ`);
+
+  const wx = await weatherLine(m, tz);
+  const [, mo, da] = today.split('-').map(Number);
+  const wd = '日月火水木金土'[new Date(Date.UTC(+today.slice(0, 4), mo - 1, da)).getUTCDay()];
+  return {
+    title: `おはようございます（${mo}/${da} ${wd}）`,
+    body: [wx, evLine, extra.join('・')].filter(Boolean).join('\n'),
+    tag: `morning-${today}`,
+    url: APP_URL,
+  };
+}
+
+async function runMorning(now: number) {
+  const { data: rows, error } = await db.from('user_data').select('user_id,data').eq('data->morning->>on', 'true');
+  if (error) throw error;
+  let sent = 0;
+  for (const row of rows ?? []) {
+    const d = row.data as FullData;
+    const m = d.morning ?? {};
+    const tz = safeTz(m.tz);
+    const { date: today, min } = localNow(now, tz);
+    const [hh, mm] = String(m.time || '07:00').split(':').map(Number);
+    const target = hh * 60 + mm;
+    if (!(min >= target && min <= target + 30)) continue;
+    const subs = await subsFor([row.user_id]);
+    if (!subs.length) continue;
+    // 先に「送った」と記録（すでにあれば、今日はもう送っている）
+    const { error: dup } = await db.from('morning_sent').insert({ user_id: row.user_id, day: today });
+    if (dup) continue;
+    const payload = await buildMorning(row.user_id, d, today, tz);
+    const res = await sendTo(subs, payload);
+    sent += res.ok;
+  }
+  return sent;
 }
 
 /* ---------- 習慣の達成判定（アプリの core.js と同じ考え方） ---------- */
@@ -204,6 +353,13 @@ Deno.serve(async (req) => {
   try {
     // 1) cron からの呼び出し
     if (req.headers.get('x-cron-secret') === CRON_SECRET) {
+      const body = await req.json().catch(() => ({}));
+      if (body?.previewMorning) {
+        const { data: row } = await db.from('user_data').select('data').eq('user_id', body.previewMorning).single();
+        const d = (row?.data ?? {}) as FullData;
+        const tz = safeTz(d.morning?.tz);
+        return json(await buildMorning(body.previewMorning, d, localNow(Date.now(), tz).date, tz));
+      }
       return json(await runDue());
     }
 
@@ -213,6 +369,15 @@ Deno.serve(async (req) => {
       const { data: { user } } = await db.auth.getUser(token);
       if (user) {
         const body = await req.json().catch(() => ({}));
+        if (body?.test === 'morning') {
+          const subs = await subsFor([user.id]);
+          if (!subs.length) return json({ ok: 0, error: 'この人の通知登録がありません' }, 404);
+          const { data: row } = await db.from('user_data').select('data').eq('user_id', user.id).single();
+          const d = (row?.data ?? {}) as FullData;
+          const tz = safeTz(d.morning?.tz);
+          const payload = await buildMorning(user.id, d, localNow(Date.now(), tz).date, tz);
+          return json({ ...(await sendTo(subs, payload)), payload });
+        }
         if (body?.test) {
           const subs = await subsFor([user.id]);
           if (!subs.length) return json({ ok: 0, error: 'この人の通知登録がありません' }, 404);

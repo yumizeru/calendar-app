@@ -18,7 +18,7 @@ const DEFAULT_CATEGORIES = [
   { id: 'cat-private', name: 'プライベート', color: '#22c55e', updatedAt: 0 },
   { id: 'cat-errand', name: '用事・通院', color: '#f59e0b', updatedAt: 0 },
 ];
-const emptyData = () => ({ version: 5, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {}, todos: [], templates: [], diary: {} });
+const emptyData = () => ({ version: 5, events: [], categories: DEFAULT_CATEGORIES.map(c => ({ ...c })), habits: [], marks: {}, todos: [], templates: [], diary: {}, feeds: [] });
 
 function normalize(d) {
   const out = emptyData();
@@ -45,6 +45,12 @@ function normalize(d) {
     .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
   // ウィジェットの色（テーマ）。どの端末で変えても、最後に変えたものを使う
   if (d.appearance && typeof d.appearance === 'object') out.appearance = { ...d.appearance, t: num(d.appearance.t) };
+  // ほかのカレンダー（iPhone・Google）のURL：[{ id, name, url, color, updatedAt, deleted? }]
+  out.feeds = (Array.isArray(d.feeds) ? d.feeds : [])
+    .filter(x => x && x.id && (x.deleted || x.url))
+    .map(x => ({ ...x, updatedAt: num(x.updatedAt) }));
+  // 毎朝のまとめ通知：{ on, time: 'HH:MM', tz, wx: { lat, lon, name } | null, t }
+  if (d.morning && typeof d.morning === 'object') out.morning = { ...d.morning, t: num(d.morning.t) };
   // ひとこと日記：{ "YYYY-MM-DD": { mood: 1〜5 か 0, text, t } }
   if (d.diary && typeof d.diary === 'object') {
     for (const [k, v] of Object.entries(d.diary)) {
@@ -103,6 +109,8 @@ function mergeData(a, b) {
     templates: byId(a.templates, b.templates),
     diary,
     appearance: !a.appearance ? b.appearance : !b.appearance ? a.appearance : (b.appearance.t > a.appearance.t ? b.appearance : a.appearance),
+    feeds: byId(a.feeds, b.feeds),
+    morning: !a.morning ? b.morning : !b.morning ? a.morning : (b.morning.t > a.morning.t ? b.morning : a.morning),
   };
 }
 
@@ -132,9 +140,18 @@ const catOf = ev => data.categories.find(c => c.id === ev.categoryId && !c.delet
 // 共有カレンダー（shared.js）は後から読み込まれるので、使う時点で有無を確かめる
 const hasShared = () => typeof Shared !== 'undefined';
 const sharedCal = ev => (ev.calendarId && hasShared() ? Shared.calendarById(ev.calendarId) : null);
-const colorOf = ev => { const sc = sharedCal(ev); return sc ? sc.color : ((catOf(ev) || {}).color || NO_CAT_COLOR); };
+const hasFeeds = () => typeof Feeds !== 'undefined';
+const colorOf = ev => {
+  if (ev.feedId) { const f = hasFeeds() ? Feeds.byId(ev.feedId) : null; return f ? f.color : NO_CAT_COLOR; }
+  const sc = sharedCal(ev); return sc ? sc.color : ((catOf(ev) || {}).color || NO_CAT_COLOR);
+};
 // 自分の予定 ＋ 参加している共有カレンダーの予定
-const allEvents = () => (hasShared() ? data.events.concat(Shared.events()) : data.events);
+// ＋ ほかのカレンダー（iPhone・Google。見るだけ）
+const allEvents = () => {
+  let list = hasShared() ? data.events.concat(Shared.events()) : data.events;
+  if (hasFeeds()) list = list.concat(Feeds.events());
+  return list;
+};
 
 /* ========== 日付ユーティリティ ========== */
 const { pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD } = Core;
@@ -749,6 +766,7 @@ function fillCalendarSelect(value) {
 function syncCalUi() { $('#evCategoryRow').hidden = !!$('#evCal').value; }
 
 function openEvent(id, occStart, newDate) {
+  if (id && String(id).startsWith('feed:') && hasFeeds()) { Feeds.show(id); return; }
   const ev = id ? findEvent(id) : null;
   editing = ev ? { id: ev.id, occStart: occStart || ev.date, recurring: !!ev.repeat, store: ev.calendarId || '' } : null;
   fillCalendarSelect(ev ? (ev.calendarId || '') : '');
@@ -778,9 +796,10 @@ function openEvent(id, occStart, newDate) {
   $('#evDelete').hidden = !ev;
   $('#evKind').value = ev && ev.kind ? ev.kind : '';
   renderTemplateRow(!ev);
+  resetQuick(!ev);
   syncDialogUi();
   dlg.showModal();
-  setTimeout(() => { if (!ev) $('#evTitle').focus(); }, 50);
+  setTimeout(() => { if (!ev) $('#evQuick').focus(); }, 50);
 }
 
 function readForm() {
@@ -997,6 +1016,41 @@ $('#evSaveTpl').addEventListener('click', () => {
   save();
   renderTemplateRow(!editing);
   toast(same ? `テンプレ「${title}」を上書きしました` : `テンプレ「${title}」を保存しました。次からワンタップで入れられます`);
+});
+/* ---------- ひと言で入力（quickadd.js で読み取って、下の欄に入れる） ---------- */
+let quickBase = null; // 開いたときの日付など（ひと言を消したら元に戻すため）
+function resetQuick(isNew) {
+  $('#quickRow').hidden = !isNew;
+  $('#evQuick').value = '';
+  $('#evQuickFound').textContent = '日付・時刻・くり返しを読み取って、下に自動で入れます';
+  $('#evQuickFound').classList.remove('on');
+  quickBase = isNew ? { date: $('#evDate').value, remind: $('#evRemind').value } : null;
+}
+function applyQuick() {
+  if (!quickBase) return;
+  const text = $('#evQuick').value;
+  const r = QuickAdd.parse(text, new Date());
+  $('#evTitle').value = r.title;
+  $('#evDate').value = r.date || quickBase.date;
+  $('#evAllDay').checked = false;
+  $('#evTime').value = r.time || '';
+  $('#evEndTime').value = r.endTime || '';
+  $('#evEndDate').value = '';
+  const rp = r.repeat;
+  $('#evRepeat').value = rp ? rp.rv : '';
+  setWeekdayChips(rp && rp.days.length ? rp.days : [parseYmd($('#evDate').value).getDay()]);
+  $('#evRemind').value = r.remind != null ? String(r.remind) : quickBase.remind;
+  syncDialogUi();
+  const f = $('#evQuickFound');
+  if (!text.trim()) { resetQuick(true); return; }
+  const parts = [...r.found, r.title ? `「${r.title}」` : 'タイトルなし'];
+  f.textContent = '読み取り：' + parts.join('・');
+  f.classList.add('on');
+}
+$('#evQuick').addEventListener('input', applyQuick);
+$('#evQuick').addEventListener('keydown', e => {
+  // Enter で保存されないように（キーボードを閉じるだけ）
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
 });
 $('#evCancel').addEventListener('click', () => dlg.close());
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
@@ -1420,6 +1474,8 @@ window.App = {
   mergeData,
   normalize,
   onChange(fn) { listeners.push(fn); },
+  // データを変えて保存する（ほかのファイルから使う）
+  update(fn) { fn(data); save(); },
   toast,
   render,
 };

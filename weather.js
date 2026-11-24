@@ -93,6 +93,7 @@ const Weather = (() => {
   function setPref(p) {
     pref = { ...pref, ...p };
     store(PREF_KEY, pref);
+    document.dispatchEvent(new CustomEvent('hibilog:weather'));
     renderSettings();
     if (typeof App !== 'undefined') App.render();
     refresh(true);
@@ -154,5 +155,9 @@ const Weather = (() => {
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
   setTimeout(() => refresh(), 500);
-  return { get, mini, short, line, summary, refresh, kind, get on() { return !!pref.on; } };
+  return {
+    get, mini, short, line, summary, refresh, kind, get on() { return !!pref.on; },
+    // 毎朝のまとめ通知で使う場所（オンのときだけ）
+    get place() { return pref.on && pref.lat != null ? { lat: pref.lat, lon: pref.lon, name: pref.name || '' } : null; },
+  };
 })();

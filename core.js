@@ -262,10 +262,198 @@ const Core = (() => {
   }
   const fmtNum = v => (Math.round(Number(v) * 100) / 100).toString();
 
+  /* ===================================================================
+   * ほかのカレンダー（iPhone・Google など）の ICS を読む
+   *  parseIcs(text, { from, to, tz, feedId })
+   *   → from〜to に重なる予定を「1回ずつ」に展開した配列（繰り返しなし）
+   *  tz: 表示する時間帯（省略時はこの端末の時間帯）
+   * =================================================================== */
+  // ある時間帯での「年月日」と「時:分」（Intl を使う）
+  function partsIn(ms, tz) {
+    const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    const p = {};
+    for (const x of f.formatToParts(new Date(ms))) p[x.type] = x.value;
+    return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour === '24' ? '00' : p.hour}:${p.minute}` };
+  }
+  // 時間帯 zone の「壁の時計」で y-m-d h:m のときの、本当の時刻（ミリ秒）
+  function wallToMs(y, mo, d, h, mi, zone) {
+    const guess = Date.UTC(y, mo - 1, d, h, mi);
+    try {
+      const p = partsIn(guess, zone);
+      const [py, pm, pd] = p.date.split('-').map(Number), [ph, pmi] = p.time.split(':').map(Number);
+      return guess - (Date.UTC(py, pm - 1, pd, ph, pmi) - guess);
+    } catch { return guess; }
+  }
+  // ICS の日時 → { date, time }（time が '' なら終日）
+  function icsWhen(prop, tz) {
+    if (!prop) return null;
+    const m = prop.value.trim().match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
+    if (!m) return null;
+    const [, y, mo, d, h, mi, , z] = m;
+    if (h == null || prop.params.VALUE === 'DATE') return { date: `${y}-${mo}-${d}`, time: '' };
+    let ms;
+    if (z) ms = Date.UTC(+y, mo - 1, +d, +h, +mi);
+    else if (prop.params.TZID) ms = wallToMs(+y, +mo, +d, +h, +mi, prop.params.TZID.replace(/^"|"$/g, ''));
+    else return { date: `${y}-${mo}-${d}`, time: `${h}:${mi}` }; // 時間帯なし＝そのまま
+    try { return partsIn(ms, tz); } catch { return partsIn(ms, 'Asia/Tokyo'); }
+  }
+  const unesc = s => String(s || '').replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+  const WDCODE = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+  // 繰り返しのルール（RRULE）にその日が当たるか
+  function rruleHit(rule, start, s) {
+    const iv = Math.max(1, Number(rule.INTERVAL) || 1);
+    const st = parseYmd(start), d = parseYmd(s);
+    const byDay = rule.BYDAY ? rule.BYDAY.split(',').map(x => { const m = x.match(/^([+-]?\d+)?([A-Z]{2})$/); return m ? { n: m[1] ? Number(m[1]) : 0, wd: WDCODE.indexOf(m[2]) } : null; }).filter(Boolean) : [];
+    const byMonthDay = rule.BYMONTHDAY ? rule.BYMONTHDAY.split(',').map(Number) : [];
+    const byMonth = rule.BYMONTH ? rule.BYMONTH.split(',').map(Number) : [];
+    const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    // 「第2月曜」「最後の金曜」
+    const nthOk = b => {
+      if (b.wd !== d.getDay()) return false;
+      if (!b.n) return true;
+      return b.n > 0 ? Math.ceil(d.getDate() / 7) === b.n : Math.ceil((dim - d.getDate() + 1) / 7) === -b.n;
+    };
+    const mdOk = () => byMonthDay.some(x => (x > 0 ? x : dim + x + 1) === d.getDate());
+    switch (rule.FREQ) {
+      case 'DAILY':
+        if (byDay.length && !byDay.some(b => b.wd === d.getDay())) return false;
+        return diffDays(start, s) % iv === 0;
+      case 'WEEKLY': {
+        const days = byDay.length ? byDay.map(b => b.wd) : [st.getDay()];
+        if (!days.includes(d.getDay())) return false;
+        // 週のはじまり（WKST）は月曜がふつう
+        const ws = WDCODE.indexOf(rule.WKST || 'MO');
+        const back = x => addDays(x, -((x.getDay() - ws + 7) % 7));
+        return Math.round(diffDays(ymd(back(st)), ymd(back(d))) / 7) % iv === 0;
+      }
+      case 'MONTHLY': {
+        const months = (d.getFullYear() - st.getFullYear()) * 12 + d.getMonth() - st.getMonth();
+        if (months % iv !== 0) return false;
+        if (byDay.length) return byDay.some(nthOk) && (!byMonthDay.length || mdOk());
+        if (byMonthDay.length) return mdOk();
+        return d.getDate() === st.getDate();
+      }
+      case 'YEARLY': {
+        if ((d.getFullYear() - st.getFullYear()) % iv !== 0) return false;
+        const months = byMonth.length ? byMonth : [st.getMonth() + 1];
+        if (!months.includes(d.getMonth() + 1)) return false;
+        if (byDay.length) return byDay.some(nthOk);
+        if (byMonthDay.length) return mdOk();
+        return d.getDate() === st.getDate();
+      }
+      default: return false;
+    }
+  }
+
+  function parseIcs(text, opt) {
+    opt = opt || {};
+    const tz = opt.tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tokyo';
+    const from = opt.from, to = opt.to, feedId = opt.feedId || 'feed';
+    // 折り返された行をつなぐ
+    const lines = String(text || '').replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+    const vevents = [];
+    let cur = null, depth = 0;
+    for (const line of lines) {
+      if (line === 'BEGIN:VEVENT') { cur = {}; depth = 0; continue; }
+      if (!cur) continue;
+      if (line.startsWith('BEGIN:')) { depth++; continue; } // VALARM など
+      if (line.startsWith('END:')) {
+        if (line === 'END:VEVENT' && depth === 0) { vevents.push(cur); cur = null; } else depth--;
+        continue;
+      }
+      if (depth) continue;
+      const i = line.indexOf(':');
+      if (i < 0) continue;
+      const [name, ...ps] = line.slice(0, i).split(';');
+      const params = {};
+      for (const p of ps) { const j = p.indexOf('='); if (j > 0) params[p.slice(0, j).toUpperCase()] = p.slice(j + 1); }
+      const prop = { value: line.slice(i + 1), params };
+      const key = name.toUpperCase();
+      if (key === 'EXDATE') (cur.EXDATE = cur.EXDATE || []).push(prop);
+      else cur[key] = prop;
+    }
+
+    const out = [];
+    const overrides = new Set(); // 「この回だけ変更」された回（UID@日付）
+    const make = (ve, st, en, date) => {
+      let endDate = '', endTime = '';
+      if (en) {
+        if (!st.time) {
+          // 終日の終わりは「次の日」で書かれている
+          const last = addDaysStr(en.date, -1);
+          if (last > st.date) endDate = addDaysStr(date, diffDays(st.date, last));
+        } else {
+          endTime = en.time;
+          if (en.date > st.date) endDate = addDaysStr(date, diffDays(st.date, en.date));
+          if (!endDate && endTime <= st.time) endTime = '';
+        }
+      }
+      const uidv = ve.UID ? ve.UID.value : `${st.date}${st.time}${unesc(ve.SUMMARY && ve.SUMMARY.value)}`;
+      return {
+        id: `feed:${feedId}:${uidv}@${date}`, feedId, readonly: true,
+        title: unesc(ve.SUMMARY && ve.SUMMARY.value).slice(0, 80) || '（タイトルなし）',
+        date, time: st.time, endDate, endTime: st.time ? endTime : '',
+        memo: unesc(ve.LOCATION && ve.LOCATION.value).slice(0, 200), updatedAt: 0,
+      };
+    };
+    const inRange = (s, e) => (!from || e >= from) && (!to || s <= to);
+
+    // 先に「この回だけ変更」を集める
+    for (const ve of vevents) {
+      if (!ve['RECURRENCE-ID'] || !ve.UID) continue;
+      const rid = icsWhen(ve['RECURRENCE-ID'], tz);
+      if (rid) overrides.add(`${ve.UID.value}@${rid.date}`);
+    }
+    for (const ve of vevents) {
+      if (ve.STATUS && /CANCELLED/i.test(ve.STATUS.value)) continue;
+      const st = icsWhen(ve.DTSTART, tz);
+      if (!st) continue;
+      let en = icsWhen(ve.DTEND, tz);
+      if (!en && ve.DURATION) {
+        const m = ve.DURATION.value.match(/P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?/);
+        if (m) {
+          const days = (+m[1] || 0) * 7 + (+m[2] || 0), mins = (+m[3] || 0) * 60 + (+m[4] || 0);
+          if (!st.time) en = { date: addDaysStr(st.date, days), time: '' };
+          else {
+            const [h, mi] = st.time.split(':').map(Number);
+            const tot = h * 60 + mi + mins;
+            en = { date: addDaysStr(st.date, days + Math.floor(tot / 1440)), time: `${pad(Math.floor(tot % 1440 / 60))}:${pad(tot % 60)}` };
+          }
+        }
+      }
+      const span = en ? Math.max(0, diffDays(st.date, st.time ? en.date : addDaysStr(en.date, -1))) : 0;
+      const rr = ve.RRULE && !ve['RECURRENCE-ID']
+        ? Object.fromEntries(ve.RRULE.value.split(';').map(x => x.split('=')).map(([k, v]) => [k.toUpperCase(), v]))
+        : null;
+      if (!rr) {
+        if (inRange(st.date, addDaysStr(st.date, span))) out.push(make(ve, st, en, st.date));
+        continue;
+      }
+      const ex = new Set();
+      for (const p of ve.EXDATE || []) for (const v of p.value.split(',')) { const w = icsWhen({ value: v, params: p.params }, tz); if (w) ex.add(w.date); }
+      let until = null;
+      if (rr.UNTIL) { const u = icsWhen({ value: rr.UNTIL, params: {} }, tz); if (u) until = u.date; }
+      const count = rr.COUNT ? Number(rr.COUNT) : 0;
+      const last = [until, to || addDaysStr(st.date, 730)].filter(Boolean).sort()[0];
+      let n = 0;
+      // 回数の指定（COUNT）がなければ、表示する期間の少し前から数えれば足りる
+      const begin = !count && from && addDaysStr(from, -span) > st.date ? addDaysStr(from, -span) : st.date;
+      for (let s = begin, guard = 0; s <= last && guard < 20000; s = addDaysStr(s, 1), guard++) {
+        if (!rruleHit(rr, st.date, s)) continue;
+        n++;
+        if (count && n > count) break;
+        if (ex.has(s) || overrides.has(`${ve.UID && ve.UID.value}@${s}`)) continue;
+        if (inRange(s, addDaysStr(s, span))) out.push(make(ve, st, en, s));
+      }
+    }
+    return out;
+  }
+
   return {
     pad, ymd, parseYmd, addDays, addDaysStr, diffDays, WD, matches, expand, onDay, timeLabel, repeatLabel, duration,
     freqOf, isNumeric, weekStart, isDue, markOf, isDoneMark, doneOn, valueOn, weekCount, weekNeed, streak, rate, level, freqLabel, fmtNum,
-    bestStreak, BADGE_STEPS, kindSuffix,
+    bestStreak, BADGE_STEPS, kindSuffix, parseIcs,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
