@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ひびログ">
   <!-- 更新するときは version.json と sw.js の VERSION も同じ番号にそろえる -->
-  <meta name="app-version" content="25">
+  <meta name="app-version" content="26">
   <title>ひびログ</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
@@ -112,7 +112,7 @@
             <span>背景の色合い</span>
             <div class="tp-grid" id="themeBases"></div>
           </div>
-          <p class="muted small">この端末だけの設定です。</p>
+          <p class="muted small">この端末だけの設定です。ウィジェットの色は「ホーム画面（アプリ・ウィジェット）」で別に選べます。</p>
         </div>
       </details>
       <details class="acc" id="accView">
@@ -311,6 +311,10 @@
           </div>
           <textarea id="widgetScript" class="script-box" rows="6" readonly hidden></textarea>
         </div>
+        <h4 class="acc-sub">ウィジェットの色</h4>
+        <p class="muted">ウィジェットだけアプリと違う色にできます。「アプリと同じ」なら、テーマ（色）に合わせて変わります。</p>
+        <p class="muted small">今の色：<b id="widgetThemeCurrent"></b></p>
+        <div id="widgetThemes"></div>
         </div>
       </details>
       <details class="acc" id="catCard">

@@ -53,6 +53,8 @@ function normalize(d) {
   if (d.morning && typeof d.morning === 'object') out.morning = { ...d.morning, t: num(d.morning.t) };
   // 天気の場所（ウィジェットが天気を出すため）：{ lat, lon, name, t } か { off: true, t }
   if (d.wxPlace && typeof d.wxPlace === 'object') out.wxPlace = { ...d.wxPlace, t: num(d.wxPlace.t) };
+  // ウィジェットだけの色：{ preset: 'same'（アプリと同じ）| おすすめのid, t }
+  if (d.widgetTheme && typeof d.widgetTheme === 'object') out.widgetTheme = { preset: String(d.widgetTheme.preset || 'same'), t: num(d.widgetTheme.t) };
   // ひとこと日記：{ "YYYY-MM-DD": { mood: 1〜5 か 0, text, t } }
   if (d.diary && typeof d.diary === 'object') {
     for (const [k, v] of Object.entries(d.diary)) {
@@ -114,6 +116,7 @@ function mergeData(a, b) {
     feeds: byId(a.feeds, b.feeds),
     morning: !a.morning ? b.morning : !b.morning ? a.morning : (b.morning.t > a.morning.t ? b.morning : a.morning),
     wxPlace: !a.wxPlace ? b.wxPlace : !b.wxPlace ? a.wxPlace : (b.wxPlace.t > a.wxPlace.t ? b.wxPlace : a.wxPlace),
+    widgetTheme: !a.widgetTheme ? b.widgetTheme : !b.widgetTheme ? a.widgetTheme : (b.widgetTheme.t > a.widgetTheme.t ? b.widgetTheme : a.widgetTheme),
   };
 }
 
@@ -382,11 +385,20 @@ function applyPrefs() {
 // テーマを変えたら、その色を同期データに入れる（ウィジェットが読む）
 function syncAppearance() {
   if (typeof Theme === 'undefined') return;
-  const c = Theme.widgetColors();
+  const c = Theme.widgetColors(data.widgetTheme);
   const { t, ...cur } = data.appearance || {};
   if (JSON.stringify(cur) === JSON.stringify(c)) return;
   data.appearance = { ...c, t: Date.now() };
   save();
+}
+
+// ウィジェットだけ別の色にする（'same' ならアプリと同じ）
+function setWidgetTheme(id) {
+  data.widgetTheme = { preset: id, t: Date.now() };
+  save();
+  syncAppearance();
+  if (typeof Theme !== 'undefined') Theme.renderWidgetPicker();
+  toast('ウィジェットの色を変えました。次にウィジェットが新しくなるときに変わります');
 }
 
 /* ========== 設定：開いている項目の「閉じる」ボタン ========== */
@@ -695,7 +707,7 @@ function render() {
   if (currentView === 'calendar') renderCalendar();
   else if (currentView === 'habits') renderHabits();
   else if (currentView === 'todos') renderTodos();
-  else { renderCategories(); updateSettingsSummary(); }
+  else { renderCategories(); updateSettingsSummary(); if (typeof Theme !== 'undefined') Theme.renderWidgetPicker(); }
   syncSettingsHeader();
   updateTodoBadge();
   const showNav = currentView === 'habits' || (currentView === 'calendar' && calMode !== 'list');

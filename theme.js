@@ -151,8 +151,10 @@ const Theme = (() => {
   }
 
   // ウィジェット用の色（同期してウィジェットが読む）。「自動」のときは明るい・暗いの両方を渡す
-  function widgetColors() {
-    const { accentHex, baseId } = resolve();
+  // wt：ウィジェットだけの色（{ preset }）。'same' や未設定ならアプリのテーマと同じ
+  function widgetColors(wt) {
+    const own = wt && wt.preset && wt.preset !== 'same' && PRESETS.find(x => x.id === wt.preset);
+    const { accentHex, baseId } = own ? resolve({ preset: own.id }) : resolve();
     const b = BASES[baseId];
     if (b.tone === 'auto') {
       return {
@@ -204,9 +206,32 @@ const Theme = (() => {
         ${swatchPreview(r.accentHex, id)}<span class="tp-name">${esc(b.name)}</span></button>`).join('');
     const cur = document.getElementById('themeCurrent');
     if (cur) cur.textContent = label();
+    renderWidgetPicker();
+  }
+
+  // ウィジェットの色の選択欄：「アプリと同じ」＋おすすめの組み合わせ
+  function renderWidgetPicker() {
+    const box = document.getElementById('widgetThemes');
+    if (!box) return;
+    const wt = typeof data !== 'undefined' && data.widgetTheme;
+    const sel = (wt && PRESETS.some(x => x.id === wt.preset)) ? wt.preset : 'same';
+    const r = resolve();
+    const item = (id, name, accentHex, baseId) => `<button class="tp-item${sel === id ? ' on' : ''}" data-wpreset="${id}" aria-label="${esc(name)}" aria-pressed="${sel === id}">
+        ${swatchPreview(accentHex, baseId)}<span class="tp-name">${esc(name)}</span></button>`;
+    box.innerHTML = `<div class="tp-grid">${item('same', 'アプリと同じ', r.accentHex, r.baseId)}</div>` +
+      GROUPS.map(g => `<div class="tp-group"><h4 class="acc-sub">${g}</h4><div class="tp-grid">` +
+        PRESETS.filter(p => p.group === g).map(p => item(p.id, p.name, accentById(p.accent).hex, p.base)).join('') +
+        '</div></div>').join('');
+    const cur = document.getElementById('widgetThemeCurrent');
+    if (cur) cur.textContent = sel === 'same' ? `アプリと同じ（${label()}）` : PRESETS.find(x => x.id === sel).name;
   }
 
   function wire() {
+    const wbox = document.getElementById('widgetThemes');
+    if (wbox) wbox.addEventListener('click', e => {
+      const b = e.target.closest('[data-wpreset]');
+      if (b && typeof setWidgetTheme === 'function') setWidgetTheme(b.dataset.wpreset);
+    });
     const presets = document.getElementById('themePresets');
     if (!presets) return;
     presets.addEventListener('click', e => {
@@ -234,5 +259,5 @@ const Theme = (() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 
-  return { label, apply, set, widgetColors, get current() { return current; } };
+  return { label, apply, set, widgetColors, renderWidgetPicker, get current() { return current; } };
 })();
